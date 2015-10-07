@@ -4,3 +4,5 @@
 *.Rproj
 inst/doc
 data/
+vignettes/*_cache
+vignettes/*.html

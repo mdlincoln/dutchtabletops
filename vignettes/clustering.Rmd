@@ -1,0 +1,170 @@
+---
+title: "Clustering the Dutch Tabletop"
+author: "Matthew Lincoln"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Vignette Title}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r libraries, include = FALSE}
+library(dutchtabletops)
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(purrr)
+library(ggplot2)
+library(cluster)
+library(knitr)
+library(threejs)
+opts_chunk$set(message = FALSE, warning = FALSE, cache = TRUE, fig.width = 7, fig.height = 6)
+```
+
+Let's take a look at some of the basic dimensions of this dataset:
+
+```{r basic_metrics}
+# Major artists
+sldb %>% 
+  count(artist, sort = TRUE) %>% 
+  mutate(artist = c(artist[1:10], rep("other", length(artist) - 10))) %>% 
+  group_by(artist) %>% 
+  summarize(n = sum(n)) %>% 
+  arrange(desc(n)) %>% 
+  kable()
+
+# Thematic formats
+sldb %>% 
+  count(thematic_format, sort = TRUE) %>% 
+  kable()
+
+# Compositional Format
+sldb %>% 
+  count(compositional_format, sort = TRUE) %>% 
+  kable()
+
+# Compositional disposition
+sldb %>% 
+  count(compositional_disposition, sort = TRUE) %>% 
+  kable()
+
+# Compositional cropping
+sldb %>% 
+  count(compositional_cropping, sort = TRUE) %>% 
+  kable()
+
+# Compositional viewpoint
+sldb %>% 
+  count(compositional_cropping, sort = TRUE) %>% 
+  kable()
+
+# Dimensions
+ggplot(sldb, aes(x = width, y = height, color = compositional_format)) + 
+  geom_point() + 
+  annotate("segment", x = 0, y = 0, xend = 300, yend = 300) + 
+  xlim(0, 225) + ylim(0, 225)
+
+# Distribution of works in time
+ggplot(sldb, aes(x = year)) + geom_histogram()
+```
+
+Note that, at the moment, paintings coded as early, mid, late, etc. are all grouped into the one year that they reference.
+This could be handled more deftly.
+
+## The experiment
+
+Do the groups of paintings that emerge when clustered based on their stylistic attributes align with those clustered based on iconographic attributes?
+
+To determine this, we can cluster by each set of variables, and then compare the agreement of these clusters.
+
+## Clustering Motifs
+
+What groups do these paintings fall in to based on the motifs within them?
+
+To calculate a motif distance between objects, identify how many shared motifs there are between each object.
+This is easily done by generating a table with a column for each motif, marking its presence or absence for a given row (object).
+From this, we can calculate an easy dissimilarity matrix calculating manhattan block distance.
+
+This can also later be enahnced with hierarchical information.
+For example, Item with motif `AC1` would have a mark for `A`, `AC`, and `AC1`, granting it some shared similarity to an object with `AC2`, and even to object with `AB3`.
+
+```{r motif_hierarchy}
+code_hierarchy <- sl_motifs %>%
+  select(ex_code) %>% 
+  filter(!is.na(ex_code)) %>% 
+  distinct() %>% 
+  mutate(
+    p0 = ex_code,
+    p1 = str_sub(ex_code, start = 1, end = -2),
+    p2 = str_sub(ex_code, start = 1, end = -3),
+    p3 = str_sub(ex_code, start = 1, end = -4),
+    p4 = str_sub(ex_code, start = 1, end = -5),
+    p5 = str_sub(ex_code, start = 1, end = -6)) %>% 
+  gather(level, ancestor, p0:p5) %>% 
+  filter(ancestor != "") %>% 
+  select(-level) %>% 
+  distinct() %>% 
+  arrange(ex_code, ancestor)
+
+# An example of what this hierarchy looks like in practice:
+sldb %>% 
+  filter(painting_code == "FvS 29") %>% 
+  inner_join(sl_motifs, by = "painting_code") %>% 
+  inner_join(code_hierarchy, by = "ex_code") %>% 
+  select(painting_code, ex_code, ancestor) %>% 
+  knitr::kable()
+```
+
+```{r motif_distance}
+motif_data <- sl_motifs %>% 
+  filter(!is.na(ex_code)) %>% 
+  left_join(code_hierarchy, by = "ex_code") %>% 
+  mutate(is_present = TRUE) %>%
+  select(painting_code, ancestor, is_present) %>% 
+  distinct() %>% 
+  spread(key = ancestor, value = is_present, fill = FALSE, drop = FALSE)
+
+motif_matrix <- motif_data %>% select(-painting_code)
+
+symm_motif_dist <- daisy(motif_matrix, type = list(symm = 1:ncol(motif_matrix)))
+clust_motif_dist <- hclust(symm_motif_dist)
+plot(clust_motif_dist, labels = motif_data$painting_code)
+rect.hclust(clust_motif_dist, k = 10, border = "red")
+```
+
+Principal component analysis is another way to visualize these clusterings. As it turns out, our clusters are less than lovely.
+
+```{r motif_pca}
+pca_projection <- motif_matrix %>% 
+  as.matrix() %>% 
+  prcomp() %>% 
+  predict(object = ., newdata = motif_matrix)
+
+# just project into the first 2 PCA axes
+pca_df <- as.data.frame(pca_projection[,1:3]) %>% 
+  mutate(cluster = cutree(clust_motif_dist, k = 10))
+
+ggplot(pca_df, aes(x = PC1, y = PC2, color = as.factor(cluster))) +
+  geom_point(size = 3, alpha = 0.5) +
+  theme_bw()
+```
+
+What's that, you wanted three principal components?
+
+```{r motif_pca3d, cache=FALSE}
+scatterplot3js(pca_df$PC1, pca_df$PC2, pca_df$PC3)
+```
+
+
+## Stylistic clustering
+
+```{r style_distance}
+clustering_vars <- c("compositional_format", "compositional_disposition", "compositional_cropping", "compositional_viewpoint")
+complete_dat <- sldb[complete.cases(sldb[,clustering_vars]),]
+clust_dat <- complete_dat[,clustering_vars]
+clust_dat <- clust_dat %>% transmute(format = as.factor(compositional_format), disp = as.factor(compositional_disposition), cropping = as.factor(compositional_cropping), viewpoint = as.factor(compositional_viewpoint))
+ddis <- daisy(clust_dat)
+complete_dat$group <- cutree(hclust(ddis), k = 6)
+```
+
