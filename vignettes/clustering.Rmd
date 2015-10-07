@@ -116,7 +116,11 @@ sldb %>%
   knitr::kable()
 ```
 
-```{r motif_distance}
+With a hierarchy defined, we now create a table with one row per object, one colum per motif.
+Each cell is `TRUE`/`FALSE`.
+From this boolean matrix, we can calculate the multidimensional distance between each row; a prerequisite to applying clustering techniques.s
+
+```{r motifs_per_object}
 motif_data <- sl_motifs %>% 
   filter(!is.na(ex_code)) %>% 
   left_join(code_hierarchy, by = "ex_code") %>% 
@@ -133,7 +137,7 @@ plot(clust_motif_dist, labels = motif_data$painting_code)
 rect.hclust(clust_motif_dist, k = 10, border = "red")
 ```
 
-Principal component analysis is another way to visualize these clusterings. As it turns out, our clusters are less than lovely.
+Principal component analysis is another way to visualize these clusterings.
 
 ```{r motif_pca}
 pca_projection <- motif_matrix %>% 
@@ -150,12 +154,18 @@ ggplot(pca_df, aes(x = PC1, y = PC2, color = as.factor(cluster))) +
   theme_bw()
 ```
 
-What's that, you wanted three principal components?
+These data are $N$-dimensional (or, in our case specifically, 254-dimensional); but each additional dimension has less and less power.
+Above are projected the first two dimensions.
+We can do 3 as well:
 
 ```{r motif_pca3d, cache=FALSE}
 scatterplot3js(pca_df$PC1, pca_df$PC2, pca_df$PC3)
 ```
 
+Needed improvements:
+
+- The way that I've induced a hierarchy from the coding system is flawed, as it assumes that each character signifies a new level, whereas some levels have a two-character abbreviation. This is pretty easy to fix.
+- Not all the artworks have been consistently tagged. Any use of `XXX and XXX` instead of `XXX; XXX; XXX` croaks my parser. This is only 30-something artworks, so easily fixable.
 
 ## Stylistic clustering
 
