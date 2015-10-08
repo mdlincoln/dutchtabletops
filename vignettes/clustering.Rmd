@@ -239,13 +239,14 @@ Needed improvements:
 - The way that I've induced a hierarchy from the coding system is flawed, as it assumes that each character signifies a new level, whereas some levels have a two-character abbreviation. This is pretty easy to fix.
 - Not all the artworks have been consistently tagged. Any use of `XXX and XXX` instead of `XXX; XXX; XXX` croaks my parser. This is only 30-something artworks, so easily fixable.
 - Let's get a table mapping full labels to each abbreviated code.
+- We also don't want to run just one cluster, but instead run it many times to see which clusters are _stable_ (constantly reappearing) and which are fugitive. This can be done with `clusterboot()`
 
 ```{r motif_clusterboot}
 library(fpc)
-n_clust <- 10
-boot_clust <- clusterboot(asymm_motif_dist, clustermethod = hclustCBI, method = "ward.D2", k = n_clust)
+n_clust <- 6
+boot_clust <- clusterboot(asymm_motif_dist, clustermethod = hclustCBI, method = "ward.D2", k = n_clust, count = FALSE)
 summary(boot_clust$result)
-cluster_stability <- data_frame(cluster = 1:10, stability = boot_clust$bootmean)
+cluster_stability <- data_frame(cluster = 1:n_clust, stability = boot_clust$bootmean)
 ```
 
 ```{r motif_clusterboot_plot}
