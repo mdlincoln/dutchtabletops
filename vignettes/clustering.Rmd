@@ -19,6 +19,7 @@ library(ggplot2)
 library(cluster)
 library(knitr)
 library(threejs)
+library(purrr)
 opts_chunk$set(message = FALSE, warning = FALSE, cache = TRUE, fig.width = 7, fig.height = 6)
 ```
 
@@ -265,8 +266,8 @@ pca_df %>%
 clustering_vars <- c("compositional_format", "compositional_disposition", "compositional_cropping", "compositional_viewpoint")
 complete_dat <- sldb[complete.cases(sldb[,clustering_vars]),]
 clust_dat <- complete_dat[,clustering_vars]
-clust_dat <- clust_dat %>% transmute(format = as.factor(compositional_format), disp = as.factor(compositional_disposition), cropping = as.factor(compositional_cropping), viewpoint = as.factor(compositional_viewpoint))
-ddis <- daisy(clust_dat)
-complete_dat$group <- cutree(hclust(ddis), k = 6)
+clust_dat <- clust_dat %>% map(as.factor)
+style_distance <- daisy(clust_dat)
+style_cluster <- hclust(style_distance)
+plot(style_cluster)
 ```
-
