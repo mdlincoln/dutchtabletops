@@ -24,7 +24,8 @@ sl_names <- c(
   "inscriptions"
 )
 
-raw_sldb <- read_csv(system.file("extdata", "sldb.csv", package = "dutchtabletops"), skip = 1, col_names = sl_names)
+raw_sldb <- read_csv("sldb.csv", skip = 1, col_names = sl_names)
+
 devtools::use_data(raw_sldb, overwrite = TRUE)
 
 sldb <- raw_sldb
