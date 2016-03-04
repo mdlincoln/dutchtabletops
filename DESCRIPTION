@@ -4,10 +4,13 @@ Title: Data on Seventeenth-Century Dutch Tabletop Still Lifes
 Version: 0.1
 Date: 2015-09-23
 Authors@R: c(
-  person("Matthew", "Lincoln", email = "matthew.d.lincoln@gmail.com", role = c("aut", "cre")),
+  person("Matthew", "Lincoln", email = "matthew.d.lincoln@gmail.com",
+    role = c("aut", "cre")),
   person("Quint", "Gregory", email = "quint5art@gmail.com", role = "aut"))
-Description: More about what it does (maybe more than one line)
-License: What license is it under?
+Description: Database of 629 tabletop still life paintings by
+  seventeenth-century painters from Haarlem, coded by stylistic and iconographic
+  properties.
+License: MIT
 LazyData: TRUE
 Suggests: knitr,
     rmarkdown
