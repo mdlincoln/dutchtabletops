@@ -5,81 +5,40 @@ library(stringr)
 import::from(plyr, revalue)
 
 # Read in the original CSV file ----
+raw_sldb <- read_csv("data-raw/sldb_ptgs.csv", na = c("NA", "", "#VALUE!", "#N/A"))
+raw_motifs <- read_csv("data-raw/sldb_motifs.csv", na = c("NA", "", "#VALUE!", "#N/A"))
 
-sl_names <- c(
-  "painting_code",
-  "artist",
-  "painting_description",
-  "thematic_format",
-  "compositional_format",
-  "compositional_disposition",
-  "compositional_cropping",
-  "compositional_viewpoint",
-  "significant_motifs",
-  "location",
-  "bibliography",
-  "date",
-  "dimensions",
-  "support",
-  "inscriptions"
-)
-
-raw_sldb <- read_csv("sldb.csv", skip = 1, col_names = sl_names)
-
-devtools::use_data(raw_sldb, overwrite = TRUE)
-
-sldb <- raw_sldb
-
-# Parse dimensions
-
-sldb <- sldb %>%
-  mutate(
-    # Fix one badly-formatted dimension cell
-    dimensions = revalue(dimensions, replace = c("29.5 39 cm (oval)" = "29.5 x 39 cm (oval)")),
-    height = str_match(dimensions, "(\\d+\\.?\\d*) x")[,2] %>% as.numeric(),
-    width = str_match(dimensions, "x (\\d+\\.?\\d*)")[,2] %>% as.numeric(),
-    # Dimensions can be modified in one of two ways - either the work is an
-    # oval, or it is a fragment
-    dim_mod = ifelse(
-      str_detect(dimensions, "oval"),
-      "oval",
-      ifelse(
-        str_detect(dimensions, "cut") | str_detect(dimensions, "fragment"),
-        "fragment",
-        NA
-      )
-    )
-  )
-
-sldb %>% filter(is.na(height)) %>% View()
+# Make a copy to start cleaning it
+dt_paintings <- raw_sldb
 
 # Parse year
-
-sldb <- sldb %>%
+dt_paintings <- dt_paintings %>%
   mutate(
-    # Fix two oddly formatted years
-    date = revalue(date, replace = c(
-      "161(5 or 6)" = "1615",
-      "mid-17th cent." = "1650"
-    )),
     # Extract the first 4 digit string and convert to integer
-    year = str_extract(date, "\\d{4}") %>% as.integer(),
+    year = as.integer(str_extract(date_string, "\\d{4}")),
     # Create a logical column indicating modifiers like c., mid, early, or late
-    is_approx_date = str_detect(date, "c\\.") |
-      str_detect(date, "mid") |
-      str_detect(date, "early") |
-      str_detect(date, "late")
+    is_approx_date = str_detect(date_string, "c\\.") |
+      str_detect(date_string, "mid") |
+      str_detect(date_string, "early") |
+      str_detect(date_string, "late")
   )
 
 # Create motifs table ----
 
-sl_motifs <- sldb %>%
+# A many-to-many table
+dt_painting_motifs <- dt_paintings %>%
   select(painting_code, significant_motifs) %>%
-  separate(significant_motifs, into = paste0("motif_", 1:7), sep = "; ", extra = "drop") %>%
-  gather(code_no, code_string, contains("motif"), na.rm = TRUE) %>%
-  select(-code_no) %>%
-  mutate(ex_code = str_match(code_string, "\\((\\S+)\\)")[,2])
+  separate(significant_motifs, into = paste0("motif_", 1:7), sep = "; ", extra = "drop", fill = "right") %>%
+  gather(code_no, motif_code, contains("motif"), na.rm = TRUE) %>%
+  select(-code_no)
 
+# Unique table of motif codes and their labels
+dt_motif_labels <- raw_motifs %>% select(motif_code, motif_label)
 
-devtools::use_data(sldb, sl_motifs)
+# Many to many table ot motif codes and their parent values
+dt_motif_taxonomy <- raw_motifs %>%
+  select(-motif_label) %>%
+  gather(parent_no, parent, p1:p2) %>%
+  select(-parent_no)
 
+devtools::use_data(dt_paintings, dt_painting_motifs, dt_motif_labels, dt_motif_taxonomy, overwrite = TRUE)
