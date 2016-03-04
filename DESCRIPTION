@@ -7,11 +7,12 @@ Authors@R: c(
   person("Matthew", "Lincoln", email = "matthew.d.lincoln@gmail.com",
     role = c("aut", "cre")),
   person("Quint", "Gregory", email = "quint5art@gmail.com", role = "aut"))
-Description: Database of 629 tabletop still life paintings by
-  seventeenth-century painters from Haarlem, coded by stylistic and iconographic
-  properties.
+Description: Database of 629 tabletop still life paintings by seventeenth-
+    century painters from Haarlem, coded by stylistic and iconographic properties.
 License: MIT
 LazyData: TRUE
-Suggests: knitr,
+Suggests:
+    knitr,
     rmarkdown
 VignetteBuilder: knitr
+RoxygenNote: 5.0.1
