@@ -21,6 +21,7 @@ library(knitr)
 library(threejs)
 library(purrr)
 library(DT)
+library(ggrepel)
 opts_chunk$set(message = FALSE, warning = FALSE, cache = FALSE, fig.width = 7, fig.height = 6)
 ```
 
@@ -82,7 +83,9 @@ This could be handled more deftly.
 
 ## The experiment
 
-Do the groups of paintings that emerge when clustered based on their stylistic attributes align with those clustered based on iconographic attributes?
+- Do certain artists have oeuvres that are more stylistically close, or distant? More iconographically close or distant?
+- Do the groups of paintings that emerge when clustered based on their stylistic attributes align with those clustered based on iconographic attributes?
+- Do relationships between certain motifs and styles change over time?
 
 To determine this, we can cluster by each set of variables, and then compare the agreement of these clusters.
 
@@ -98,29 +101,14 @@ This can also later be enahnced with hierarchical information.
 For example, Item with motif `AC1` would have a mark for `A`, `AC`, and `AC1`, granting it some shared similarity to an object with `AC2`, and even to object with `AB3`.
 
 ```{r motif_hierarchy, eval=FALSE}
-code_hierarchy <- dt_motifs %>%
-  select(ex_code) %>% 
-  filter(!is.na(ex_code)) %>% 
-  distinct() %>% 
-  mutate(
-    p0 = ex_code,
-    p1 = str_sub(ex_code, start = 1, end = -2),
-    p2 = str_sub(ex_code, start = 1, end = -3),
-    p3 = str_sub(ex_code, start = 1, end = -4),
-    p4 = str_sub(ex_code, start = 1, end = -5),
-    p5 = str_sub(ex_code, start = 1, end = -6)) %>% 
-  gather(level, ancestor, p0:p5) %>% 
-  filter(ancestor != "") %>% 
-  select(-level) %>% 
-  distinct() %>% 
-  arrange(ex_code, ancestor)
-
 # An example of what this hierarchy looks like in practice:
 dt_paintings %>% 
   filter(painting_code == "FvS 29") %>% 
-  inner_join(sl_motifs, by = "painting_code") %>% 
-  inner_join(code_hierarchy, by = "ex_code") %>% 
-  select(painting_code, ex_code, ancestor) %>% 
+  inner_join(dt_painting_motifs, by = "painting_code") %>% 
+  inner_join(dt_motif_taxonomy, by = "motif_code") %>% 
+  inner_join(dt_motif_labels, by = "motif_code") %>% 
+  select(painting_code, motif_code = parent, motif_label) %>% 
+  filter(!is.na(motif_code)) %>% 
   knitr::kable()
 ```
 
@@ -129,17 +117,16 @@ Each cell is `TRUE`/`FALSE`.
 From this boolean matrix, we can calculate the multidimensional distance between each row; a prerequisite to applying clustering techniques.s
 
 ```{r motifs_per_object, eval=FALSE}
-motif_data <- sl_motifs %>% 
-  filter(!is.na(ex_code)) %>% 
-  left_join(code_hierarchy, by = "ex_code") %>% 
+motif_data <- dt_painting_motifs %>% 
+  left_join(dt_motif_taxonomy, by = "motif_code") %>% 
+  mutate(parent = ifelse(is.na(parent), motif_code, parent)) %>% 
+  select(-motif_code) %>% 
   mutate(is_present = TRUE) %>%
-  select(painting_code, ancestor, is_present) %>% 
   distinct() %>% 
-  spread(key = ancestor, value = is_present, fill = FALSE, drop = FALSE) %>% 
-  inner_join(select(dt_paintings, painting_code, artist, painting_description, year), by = "painting_code") %>% 
-  mutate(label = paste(painting_code, artist, painting_description, year, sep = "<br>"))
+  spread(key = parent, value = is_present, fill = FALSE, drop = FALSE)
 
-motif_matrix <- motif_data %>% select(-painting_code, -artist, -painting_description, -year, -label) %>% data.matrix()
+motif_matrix <- motif_data %>% select(-painting_code) %>% data.matrix()
+rownames(motif_matrix) <- motif_data$painting_code
 ```
 
 We want to treat the existence/non-existence of a given motif as _binary_.
@@ -163,49 +150,33 @@ It is also possible (at the cost of introducing a lot more arbitrary decision ma
 
 [^symmnote]: See ["Symmetric versus Asymmetric Nominal Variables"](http://support.sas.com/documentation/cdl/en/statug/63033/HTML/default/viewer.htm#statug_distance_sect003.htm)
 
+```{r motif_dist}
+motif_dist <- dist(motif_matrix, method = "euclidean")
+motif_clust <- hclust(motif_dist)
 
-```{r motif_distance, eval=FALSE}
-symm_motif_dist <- daisy(motif_matrix, type = list(symm = 1:ncol(motif_matrix)))
-symm_motif_clust <- hclust(symm_motif_dist, method = "ward.D")
-
-asymm_motif_dist <- daisy(motif_matrix, type = list(asymm = 1:ncol(motif_matrix)))
-asymm_motif_clust <- hclust(asymm_motif_dist, method = "ward.D")
-```
-
-```{r motif_symm_dendrogram, eval=FALSE}
-n_clust <- 10
-
-# Symmetric binary
-plot(symm_motif_clust, labels = FALSE)
-rect.hclust(symm_motif_clust, k = n_clust, border = "red")
-```
-
-```{r motif_asymm_dendrogram, eval=FALSE}
-# Asymetric binary
-plot(asymm_motif_clust, labels = FALSE)
-rect.hclust(asymm_motif_clust, k = n_clust, border = "red")
-```
-
-```{r, cache = FALSE, eval=FALSE}
-motif_data %>% 
-  mutate(group = cutree(asymm_motif_clust, k = n_clust)) %>% 
-  select(group, painting_code, painting_description, artist, year) %>% 
-  datatable()
 ```
 
 Principal component analysis is another way to visualize these clusterings.
 
-```{r motif_pca, eval=FALSE}
-pca <- prcomp(motif_matrix)
-prin <- princomp(motif_matrix)
-tpca_projection <- predict(pca, newdata = motif_matrix)
+```{r motif_pca}
+prin <- prcomp(motif_matrix, scale. = TRUE)
+tpca_projection <- predict(prin, newdata = motif_matrix)
 
 # just project into the first 2dis PCA axes
-pca_df <- as.data.frame(pca_projection[,1:3]) %>% 
-  mutate(cluster = cutree(symm_motif_clust, k = 6))
+pca_df <- as.data.frame(tpca_projection[,1:3])
+pca_df$painting_code <- rownames(pca_df)
+pca_df <- pca_df %>% inner_join(dt_paintings, by = "painting_code")
 
-ggplot(pca_df, aes(x = PC1, y = PC2, color = as.factor(cluster))) +
+motif_load <- as.data.frame(scale(prin$rotation[,1:2])) %>% 
+  mutate(
+    motif_code = rownames(.),
+    magnitude = sqrt(PC1^2 + PC2^2)) %>% 
+  top_n(20, magnitude)
+
+ggplot(pca_df, aes(x = PC1, y = PC2)) +
   geom_point(size = 5, alpha = 0.5) +
+  geom_segment(data = motif_load, aes(xend = 0, yend = 0), color = "red") +
+  geom_text_repel(data = motif_load, aes(label = motif_code)) +
   theme_bw() +
   theme(legend.position = "bottom")
 ```
