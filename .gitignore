@@ -8,3 +8,4 @@ vignettes/*_cache
 vignettes/*.html
 vignettes/*_files
 vignettes/*.R
+.httr-oauth

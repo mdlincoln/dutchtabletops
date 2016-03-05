@@ -2,14 +2,15 @@ library(dplyr)
 library(readr)
 library(tidyr)
 library(stringr)
+library(googlesheets)
 import::from(plyr, revalue)
 
-# Read in the original CSV file ----
-raw_sldb <- read_csv("data-raw/sldb_ptgs.csv", na = c("NA", "", "#VALUE!", "#N/A"))
-raw_motifs <- read_csv("data-raw/sldb_motifs.csv", na = c("NA", "", "#VALUE!", "#N/A"))
+sldb <- gs_title("sldb")
 
-# Make a copy to start cleaning it
-dt_paintings <- raw_sldb
+# Read in the original CSV file ----
+dt_paintings <- sldb %>% gs_read(ws = "paintings")
+raw_motifs <- sldb %>% gs_read(ws = "motifs")
+raw_artists <- sldb %>% gs_read(ws = "artists")
 
 # Parse year
 dt_paintings <- dt_paintings %>%
