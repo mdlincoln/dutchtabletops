@@ -11,12 +11,48 @@ library(dplyr)
 library(ggplot2)
 library(ggrepel)
 library(tidyr)
+library(knitr)
+library(lsa)
 library(cluster)
 ```
 
 Let's calculate the distance bewteen all the works in each artist's ouevre.
 We can calculate a motif distance based on the presence/absence of each motif in an artwork.
 Compositional distance can be similarly calculated, with each different compositional value as a nominal factor.
+
+# A toy example
+
+Let's take a look at two paintings that have similar, but not identical, motifs:
+
+1. `WCH30`: `T1a`; `CD1d`; `CO1c`
+2. `WCH31`: `T3a`; `Br4`; `CD1d`; `CO1c`; `Sh1b`
+
+They each feature roemers, overturned tazzas, and peeled lemons with slight variations.
+`T1a` and `T3a` are closer, taxonomically, than `T1a` and `Sh1b`.
+That is, the former pair shares a parent while the latter pair does not.
+
+```{r shared_motif_example}
+example_motif_dist <- dt_painting_motifs %>% 
+  filter(painting_code %in% c("WCH30", "WCH31")) %>% 
+  left_join(dt_motif_taxonomy, by = "motif_code") %>% 
+  mutate(parent = ifelse(is.na(parent), motif_code, parent)) %>% 
+  select(-motif_code) %>%
+  arrange(painting_code)
+
+kable(example_motif_dist)
+```
+
+The overlaps between these can be visualized like so:
+
+```{r shared_motif_distance}
+motif_adj <- example_motif_dist %>% 
+  mutate(is_present = TRUE) %>%
+  distinct() %>% 
+  spread(key = parent, value = is_present, fill = FALSE, drop = FALSE)
+
+example_dist <- 
+```
+
 
 ```{r motif_data}
 motif_data <- dt_painting_motifs %>% 
@@ -28,15 +64,27 @@ motif_data <- dt_painting_motifs %>%
   spread(key = parent, value = is_present, fill = FALSE, drop = FALSE)
 ```
 
+
+# Processing each artist's oeuvre
+
+
+
 I'll create a separate distance measurement function for each set of variables. This will return per-oeuvre distance metrics (e.g., mean distance and CF distance).
 
 ```{r per_artist_dist, warning=FALSE}
 oeuvre_motif_dist <- function(oeuvre) {
-  odist <- oeuvre %>% 
+  osim  <- oeuvre %>% 
     select(B:W5) %>% 
     data.matrix() %>% 
-    scale() %>% 
-    daisy(metric = "gower")
+    t() %>% 
+    cosine()
+  
+  # We only want the upper triangle of the matrix, as there's no need to measure
+  # the distance of the same works to themselves
+  osim <- osim[upper.tri(osim)]
+  
+  # Cosine returns _similarity_, so subtract it from one to get the oeuvre distances
+  odist <- 1 - osim
   
   data_frame(n_works = oeuvre$n_works[1], mean_dist = mean(odist), med_dist = median(odist), sd_dist = sd(odist), covar_dist = sd_dist/mean_dist)
 }
@@ -74,8 +122,12 @@ per_artist_dist %>%
   spread(distance_type, mean_dist) %>% 
   ggplot(aes(x = composition, y = motif, color = artist)) +
   geom_point(aes(size = n_works)) +
-  geom_label_repel(aes(label = artist)) +
+  geom_label_repel(aes(label = paste(artist, "-", n_works, "works"))) +
   scale_color_discrete(guide = FALSE)
 ```
 
-It might we worth trying cosine similarity as well, esp. for motifs, as they are a lot like word counts.
+
+Note that there are several artists like Floris van Dijck, Floris van Schooten, and Cornelis Mahu, who have a lower-than-average mean compositional distance, i.e. their works had very similar compositions.
+However, they had a much different range of motif distances - Floris van Dijck was remarkably low, while Pieter Claesz, Willem claesz Heda, and Gerrit Heda were quite high.
+
+Gerrit Heda also had a quite high mean compositional distance, i.e. his oeuvre had a relatively 
