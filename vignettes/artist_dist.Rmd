@@ -1,0 +1,81 @@
+---
+title: "Artist-wise Distance"
+author: "Matthew Lincoln"
+date: "March 5, 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(dutchtabletops)
+library(dplyr)
+library(ggplot2)
+library(ggrepel)
+library(tidyr)
+library(cluster)
+```
+
+Let's calculate the distance bewteen all the works in each artist's ouevre.
+We can calculate a motif distance based on the presence/absence of each motif in an artwork.
+Compositional distance can be similarly calculated, with each different compositional value as a nominal factor.
+
+```{r motif_data}
+motif_data <- dt_painting_motifs %>% 
+  left_join(dt_motif_taxonomy, by = "motif_code") %>% 
+  mutate(parent = ifelse(is.na(parent), motif_code, parent)) %>% 
+  select(-motif_code) %>% 
+  mutate(is_present = TRUE) %>%
+  distinct() %>% 
+  spread(key = parent, value = is_present, fill = FALSE, drop = FALSE)
+```
+
+I'll create a separate distance measurement function for each set of variables. This will return per-oeuvre distance metrics (e.g., mean distance and CF distance).
+
+```{r per_artist_dist, warning=FALSE}
+oeuvre_motif_dist <- function(oeuvre) {
+  odist <- oeuvre %>% 
+    select(B:W5) %>% 
+    data.matrix() %>% 
+    scale() %>% 
+    daisy(metric = "gower")
+  
+  data_frame(n_works = oeuvre$n_works[1], mean_dist = mean(odist), med_dist = median(odist), sd_dist = sd(odist), covar_dist = sd_dist/mean_dist)
+}
+
+oeuvre_comp_dist <- function(oeuvre) {
+  odist <- oeuvre %>% 
+    select(compositional_format, compositional_cropping, compositional_viewpoint, height, width, illusionistic_signature) %>% 
+    mutate_each(funs(as.factor), compositional_format, compositional_cropping, compositional_viewpoint) %>% 
+    daisy(metric = "gower")
+  
+  data_frame(n_works = oeuvre$n_works[1], mean_dist = mean(odist), med_dist = median(odist), sd_dist = sd(odist), covar_dist = sd_dist/mean_dist)
+}
+
+artist_groups <- dt_paintings %>% 
+  inner_join(motif_data, by = "painting_code") %>% 
+  filter(!is.na(artist)) %>% 
+  group_by(artist) %>% 
+  mutate(n_works = n()) %>% 
+  # Just look at the 10 largest artist oeuvres for now
+  filter(n() > 10)
+
+per_artist_dist <- bind_rows(
+  "motif" = do(artist_groups, oeuvre_motif_dist(.)),
+  "composition" = do(artist_groups, oeuvre_comp_dist(.)),
+  .id = "distance_type"
+)
+```
+
+Now we can compare the mean distance in composition, versus motif.
+Artists with a high distance would have a more diverse oeuvre.
+
+```{r compare_dist_types}
+per_artist_dist %>% 
+  select(artist, n_works, distance_type, mean_dist) %>% 
+  spread(distance_type, mean_dist) %>% 
+  ggplot(aes(x = composition, y = motif, color = artist)) +
+  geom_point(aes(size = n_works)) +
+  geom_label_repel(aes(label = artist)) +
+  scale_color_discrete(guide = FALSE)
+```
+
+It might we worth trying cosine similarity as well, esp. for motifs, as they are a lot like word counts.
