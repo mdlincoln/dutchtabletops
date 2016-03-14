@@ -13,6 +13,7 @@ library(ggrepel)
 library(tidyr)
 library(knitr)
 library(lsa)
+library(scales)
 library(cluster)
 ```
 
@@ -42,17 +43,8 @@ example_motif_dist <- dt_painting_motifs %>%
 kable(example_motif_dist)
 ```
 
-The overlaps between these can be visualized like so:
 
-```{r shared_motif_distance}
-motif_adj <- example_motif_dist %>% 
-  mutate(is_present = TRUE) %>%
-  distinct() %>% 
-  spread(key = parent, value = is_present, fill = FALSE, drop = FALSE)
-
-example_dist <- 
-```
-
+And all motifs can be laid out into an incidence matrix like so, with one row per painting and one `TRUE`/`FALSE` column per motif.
 
 ```{r motif_data}
 motif_data <- dt_painting_motifs %>% 
@@ -65,26 +57,189 @@ motif_data <- dt_painting_motifs %>%
 ```
 
 
+
+# Paintings in Motif Space
+
+Composition data may also be laid out in an incidence matrix:
+
+```{r comp_data}
+comp_data <- dt_paintings %>% 
+  select(painting_code, compositional_format, compositional_cropping, compositional_viewpoint, height, width, illusionistic_signature) %>%
+  filter(!is.na(compositional_cropping), !is.na(compositional_viewpoint), !is.na(height), !is.na(width)) %>% 
+  mutate(
+    # compositional_cropping = plyr::revalue(compositional_cropping, replace = c("tight" = 0, "normal" = 0.5, "expanded" = 1)),
+    height = rescale(height),
+    width = rescale(width)) %>% 
+  mutate(crop = TRUE, view = TRUE, sig = TRUE, fmt = TRUE) %>% 
+  spread(compositional_cropping, crop, fill = FALSE) %>% 
+  spread(compositional_format, fmt, fill = FALSE) %>% 
+  spread(compositional_viewpoint, view, fill = FALSE)
+```
+
+We are generall comfortable thinking about space in both two and three dimensions, because we are intuitively able to project from a two-dimensional space into a three-dimensional one.
+
+```{r main_motifs}
+motif_sums <- motif_data %>% 
+  filter(painting_code %in% c("GH20", "WCH30", "WCH65")) %>% 
+  gather(motif, present, B:W5) %>% 
+  group_by(motif) %>% 
+  filter(any(present))
+```
+
+We can think of every one of these motifs as a dimension in space. Paintings with herring will all sit near each other on the "herring" dimension, just as paintings with candles will sit on the same spot on the "candle" dimension.
+Plotted in 2D space, panitngs with a candle AND herring will be closer to each other than those with only one, or none.
+We can extend that into three dimensions, of course, by adding an axis for, say, "ham".
+And it becomes difficult to visualize, but in fact we can do this for as many dimensions as we have motifs, creating an $n$-dimensional motif space for these paintings.
+Of course, we cannot visualize a space with 153 dimensions, but even if we can only see it on a flat 2D plane, we can rotate the space until each point is as separated from each other as they are going to be.
+
+```{r motif_pca}
+motif_matrix <- motif_data %>% 
+  select(-painting_code) %>% 
+  data.matrix()
+
+rownames(motif_matrix) <- motif_data$painting_code
+
+motif_pca <- prcomp(motif_matrix, center = TRUE)
+
+motif_obs <- as.data.frame(motif_pca$x) %>% 
+  mutate(painting_code = rownames(motif_pca$x)) %>% 
+  left_join(dt_painting_artist, by = "painting_code")
+
+motif_rot <- as.data.frame(motif_pca$rotation) %>% 
+  mutate(motif_code = rownames(motif_pca$rotation)) %>% 
+  select(motif_code, PC1, PC2) %>% 
+  left_join(dt_motif_labels, by = "motif_code") %>% 
+  mutate(
+    PC1 = rescale(PC1, to = c(min(motif_obs$PC1), max(motif_obs$PC1))),
+    PC2 = rescale(PC2, to = c(min(motif_obs$PC2), max(motif_obs$PC2))),
+    power = sqrt(PC1^2 + PC2^2)) %>% 
+  top_n(10, power)
+```
+
+```{r artist_motif_examples}
+artist_motif_plot <- function(artist_name) {
+  motif_obs %>% 
+    mutate(highlight_artist = ifelse(artist %in% artist_name, artist, NA), point_size = ifelse(is.na(highlight_artist), 2, 5)) %>% 
+    ggplot(aes(x = PC1, y = PC2)) + 
+    geom_segment(data = motif_rot, aes(xend = 0, yend = 0), color = "black") +
+    geom_point(alpha = 0.7, aes(color = highlight_artist, size = point_size)) +
+    geom_label(data = motif_rot, aes(label = motif_label)) +
+    scale_size_identity() +
+    scale_color_brewer(type = "qual", palette = "Set2", na.value = "gray") +
+    theme_void() +
+    theme(legend.position = "top")
+}
+artist_motif_plot(c("Floris van Dijck", "Willem Claesz Heda"))
+```
+
+# Paintings in composition space
+
+```{r comp_pca}
+comp_matrix <- comp_data %>% 
+  select(-painting_code) %>% 
+  data.matrix()
+
+rownames(comp_matrix) <- comp_data$painting_code
+
+comp_pca <- prcomp(comp_matrix, center = TRUE, .scale = TRUE)
+
+comp_obs <- as.data.frame(comp_pca$x) %>% 
+  mutate(painting_code = rownames(comp_pca$x)) %>% 
+  left_join(dt_painting_artist, by = "painting_code")
+
+comp_rot <- as.data.frame(comp_pca$rotation) %>% 
+  mutate(composition_var = rownames(comp_pca$rotation)) %>% 
+  select(composition_var, PC1, PC2) %>% 
+  mutate(
+    PC1 = rescale(PC1, to = c(min(comp_obs$PC1), max(comp_obs$PC1))),
+    PC2 = rescale(PC2, to = c(min(comp_obs$PC2), max(comp_obs$PC2))),
+    power = sqrt(PC1^2 + PC2^2))
+
+artist_name <- c("Floris van Dijck", "Willem Claesz Heda", "Pieter Claesz", "Floris van Schooten", "Gerrit Heda")
+
+comp_obs %>% 
+  mutate(highlight_artist = ifelse(artist %in% artist_name, artist, NA), point_size = ifelse(is.na(highlight_artist), 3, 4)) %>% 
+  ggplot(aes(x = PC1, y = PC2)) +
+  geom_segment(data = comp_rot, aes(xend = 0, yend = 0), color = "black") +
+  geom_jitter(aes(size = point_size, color = highlight_artist), alpha = 0.6) +
+  geom_label(data = comp_rot, aes(label = composition_var)) + 
+  scale_size_identity() +
+  scale_color_brewer(type = "qual", palette = "Set2", na.value = "gray") +
+  theme_void() +
+  theme(legend.position = "top")
+```
+
+# Combined Space
+
+```{r combined_matrix, fig.height=7, fig.width=9}
+comb_data <- motif_data %>% inner_join(comp_data, by = "painting_code")
+  
+comb_matrix <- comb_data %>% select(-painting_code) %>% data.matrix()
+
+rownames(comb_matrix) <- comb_data$painting_code
+
+comb_pca <- prcomp(comb_matrix, center = TRUE, .scale = TRUE)
+
+comb_obs <- as.data.frame(comb_pca$x) %>% 
+  mutate(painting_code = rownames(comb_pca$x)) %>% 
+  left_join(dt_painting_artist, by = "painting_code")
+
+comb_rot <- as.data.frame(comb_pca$rotation) %>% 
+  mutate(var_label = rownames(comb_pca$rotation)) %>% 
+  select(var_label, PC1, PC2) %>% 
+  left_join(dt_motif_labels, by = c("var_label" = "motif_code")) %>% 
+  mutate(var_label = ifelse(is.na(motif_label), var_label, motif_label), var_type = ifelse(is.na(motif_label), "compositional", "motif")) %>% 
+  mutate(
+    PC1 = rescale(PC1, to = c(min(comb_obs$PC1), max(comb_obs$PC1))),
+    PC2 = rescale(PC2, to = c(min(comb_obs$PC2), max(comb_obs$PC2))),
+    power = sqrt(PC1^2 + PC2^2)) %>% 
+  top_n(20, power)
+
+library(ggrepel)
+
+comb_obs %>% 
+  mutate(highlight_artist = ifelse(artist %in% artist_name, artist, NA), point_size = ifelse(is.na(highlight_artist), 3, 5)) %>% 
+  ggplot(aes(x = PC1, y = PC2)) +
+  geom_point(aes(color = highlight_artist, size = point_size), alpha = 0.6) +
+  geom_segment(data = comb_rot, aes(xend = 0, yend = 0, linetype = var_type)) +
+  geom_label_repel(data = comb_rot, aes(label = var_label, linetype = var_type)) +
+  scale_color_brewer(type = "qual", palette = "Set2", na.value = "gray") +
+  scale_size_identity() +
+  theme(legend.position = "top")
+```
+
 # Processing each artist's oeuvre
-
-
 
 I'll create a separate distance measurement function for each set of variables. This will return per-oeuvre distance metrics (e.g., mean distance and CF distance).
 
 ```{r per_artist_dist, warning=FALSE}
-oeuvre_motif_dist <- function(oeuvre) {
-  osim  <- oeuvre %>% 
-    select(B:W5) %>% 
-    data.matrix() %>% 
-    t() %>% 
-    cosine()
+oeuvre_motif_dist <- function(oeuvre, method = c("cosine", "asymm", "symm")) {
   
-  # We only want the upper triangle of the matrix, as there's no need to measure
-  # the distance of the same works to themselves
-  osim <- osim[upper.tri(osim)]
-  
-  # Cosine returns _similarity_, so subtract it from one to get the oeuvre distances
-  odist <- 1 - osim
+  if(method == "cosine") {
+    osim  <- oeuvre %>% 
+      select(B:W5) %>% 
+      data.matrix() %>% 
+      t() %>% 
+      # gw_idf() %>% 
+      cosine()
+    
+    # We only want the upper triangle of the matrix, as there's no need to measure
+    # the distance of the same works to themselves
+    osim <- osim[upper.tri(osim)]
+    
+    # Cosine returns _similarity_, so subtract it from one to get the oeuvre distances
+    odist <- 1 - osim
+  } else if(method == "asymm") {
+    odist  <- oeuvre %>% 
+      select(B:W5) %>% 
+      daisy(metric = "gower", type = list("asymm" = 1:ncol(.)))
+  } else if(method == "symm") {
+    odist  <- oeuvre %>% 
+      select(B:W5) %>% 
+      daisy(metric = "gower", type = list("symm" = 1:ncol(.)))
+  } else {
+    stop("Method '", method, "' is not recognized.")
+  }
   
   data_frame(n_works = oeuvre$n_works[1], mean_dist = mean(odist), med_dist = median(odist), sd_dist = sd(odist), covar_dist = sd_dist/mean_dist)
 }
@@ -100,14 +255,17 @@ oeuvre_comp_dist <- function(oeuvre) {
 
 artist_groups <- dt_paintings %>% 
   inner_join(motif_data, by = "painting_code") %>% 
+  inner_join(dt_painting_artist, by = "painting_code") %>% 
   filter(!is.na(artist)) %>% 
-  group_by(artist) %>% 
+  unite(artist_detail, artist, artist_relationship, sep = " - ") %>% 
+  group_by(artist_detail) %>% 
   mutate(n_works = n()) %>% 
-  # Just look at the 10 largest artist oeuvres for now
-  filter(n() > 10)
+  filter(n_works > 10)
 
 per_artist_dist <- bind_rows(
-  "motif" = do(artist_groups, oeuvre_motif_dist(.)),
+  "motif_cosine" = do(artist_groups, oeuvre_motif_dist(., method = "cosine")),
+  "motif_asymm" = do(artist_groups, oeuvre_motif_dist(., method = "asymm")),
+  "motif_symm" = do(artist_groups, oeuvre_motif_dist(., method = "symm")),
   "composition" = do(artist_groups, oeuvre_comp_dist(.)),
   .id = "distance_type"
 )
@@ -118,16 +276,46 @@ Artists with a high distance would have a more diverse oeuvre.
 
 ```{r compare_dist_types}
 per_artist_dist %>% 
-  select(artist, n_works, distance_type, mean_dist) %>% 
+  select(artist_detail, n_works, distance_type, mean_dist) %>% 
   spread(distance_type, mean_dist) %>% 
-  ggplot(aes(x = composition, y = motif, color = artist)) +
+  ggplot(aes(x = motif_asymm, y = composition, color = artist_detail)) +
   geom_point(aes(size = n_works)) +
-  geom_label_repel(aes(label = paste(artist, "-", n_works, "works"))) +
+  geom_label_repel(aes(label = paste(artist_detail, "-", n_works, "works"))) +
   scale_color_discrete(guide = FALSE)
 ```
 
+This is neat!
+Notice how `Pieter Claesz - Definite` has the same motif diversity as `Pieter Claesz - Possible` but a much lower compositional distance?
+It's almost as if these questionable works have a larger range of compositional expression.
+The same relationship holds for `Willem Claesz Heda - Definite` versus `Willem Claesz Heda - Possible`.
+But the reverse appears for `Willem Claesz Heda - After` and `Pieter Claesz - After`: they fall into a much more restrictive compositional range.
+This difference may be explained by the fact that artists who made derivative copies after Claesz or Heda were making an "image" of a Claesz or Heda.
 
 Note that there are several artists like Floris van Dijck, Floris van Schooten, and Cornelis Mahu, who have a lower-than-average mean compositional distance, i.e. their works had very similar compositions.
 However, they had a much different range of motif distances - Floris van Dijck was remarkably low, while Pieter Claesz, Willem claesz Heda, and Gerrit Heda were quite high.
 
 Gerrit Heda also had a quite high mean compositional distance, i.e. his oeuvre had a relatively 
+
+```{r with_after}
+artist_groups <- dt_paintings %>% 
+  inner_join(motif_data, by = "painting_code") %>% 
+  left_join(dt_painting_artist, by = "painting_code") %>% 
+  group_by(artist) %>% 
+  mutate(n_works = n()) %>% 
+  # Just look at the 10 largest artist oeuvres for now
+  filter(n() > 10)
+
+per_artist_dist <- bind_rows(
+  "motif" = do(artist_groups, oeuvre_motif_dist(.)),
+  "composition" = do(artist_groups, oeuvre_comp_dist(.)),
+  .id = "distance_type"
+)
+
+per_artist_dist %>% 
+  select(artist, n_works, distance_type, mean_dist) %>% 
+  spread(distance_type, mean_dist) %>% 
+  ggplot(aes(x = motif, y = composition, color = artist)) +
+  geom_point(aes(size = n_works)) +
+  geom_label_repel(aes(label = paste(artist, "-", n_works, "works"))) +
+  scale_color_discrete(guide = FALSE)
+```
