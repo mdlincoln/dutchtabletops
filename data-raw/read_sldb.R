@@ -36,7 +36,7 @@ dt_painting_motifs <- dt_paintings %>%
   gather(code_no, motif_code, contains("motif"), na.rm = TRUE) %>%
   select(-code_no)
 
-dt_paintings <- dt_paintings %>% select(-significant_motifs)
+dt_paintings <- dt_paintings %>% select(-significant_motifs, -artist)
 
 # Unique table of motif codes and their labels
 dt_motif_labels <- raw_motifs %>% select(motif_code, motif_label)
