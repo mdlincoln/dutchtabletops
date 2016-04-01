@@ -1,0 +1,128 @@
+---
+title: "Random Forest"
+author: "Matthew Lincoln"
+date: "March 27, 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(dutchtabletops)
+library(randomForest)
+library(dplyr)
+library(tidyr)
+library(dfname)
+```
+
+First, let's select the paintings that we wish to use, deciding how to define the attributions.
+We may create multipel options - for example, separating out "Definite", "After", and "Possible", or combining "Definite" with "Possible".
+
+```{r ptg_selection}
+model_attrs <- dt_painting_artist %>% 
+  unite(artist_union, artist, artist_relationship, sep = " - ") %>% 
+  group_by(artist_union) %>% 
+  filter(n() >= 10) %>% 
+  group_by(painting_code) %>% 
+  filter(row_number(painting_code) == 1) %>% 
+  ungroup()
+```
+
+Second, let's build a data frame of motifs, a data frame of composition, and a combined data frame with both types of attributes.
+
+```{r motif_data}
+motif_data <- dt_painting_motifs %>% 
+  left_join(dt_motif_taxonomy, by = "motif_code") %>% 
+  mutate(parent = ifelse(is.na(parent), motif_code, parent)) %>% 
+  select(-motif_code, -is_top_level) %>% 
+  mutate(is_present = TRUE) %>%
+  distinct() %>% 
+  spread(key = parent, value = is_present, fill = FALSE, drop = FALSE) %>% 
+  inner_join(model_attrs, by = "painting_code") %>% 
+  mutate_each(funs(as.factor), B:artist_union)
+
+comp_data <- dt_paintings %>% 
+  select(painting_code, compositional_format, compositional_cropping, compositional_viewpoint, height, width, illusionistic_signature) %>%
+  filter(!is.na(compositional_cropping), !is.na(compositional_viewpoint), !is.na(height), !is.na(width)) %>% 
+  # mutate(
+  #   # compositional_cropping = plyr::revalue(compositional_cropping, replace = c("tight" = 0, "normal" = 0.5, "expanded" = 1)),
+  #   height = scales::rescale(height),
+  #   width = scales::rescale(width)) %>% 
+  mutate(crop = TRUE, view = TRUE, fmt = TRUE) %>% 
+  spread(compositional_cropping, crop, fill = FALSE) %>% 
+  spread(compositional_format, fmt, fill = FALSE) %>% 
+  spread(compositional_viewpoint, view, fill = FALSE) %>% 
+  inner_join(model_attrs, by = "painting_code") %>% 
+  mutate_each(funs(as.factor), illusionistic_signature:artist_union)
+
+motif_comp_data <- motif_data %>% 
+  inner_join(comp_data, by = c("painting_code", "artist_union"))
+
+```
+
+Now join the table of artist attributions, so that we have a response variable (artist) for each painting.
+I'll only keep the artists who have at least 10 paintings. 
+
+Now, we will train a random forest classifier that will try to learn how to classify these paintings. `motif_rf` will only get to work with motifs, `comp_rf` only with the compositional variables, and `
+
+```{r training_model}
+trees <- 5000
+
+motif_tune <- tuneRF(name_out(motif_data, "painting_code"), motif_data$artist_union)
+comp_tune <- tuneRF(name_out(comp_data, "painting_code"), comp_data$artist_union)
+
+motif_rf <- randomForest(artist_union ~ ., data = name_out(motif_data, "painting_code"), ntree = trees, do.trace = 500, mtry = 96)
+varImpPlot(motif_rf)
+motif_confusion <- as.data.frame(motif_rf$confusion)
+
+comp_rf <- randomForest(artist_union ~ ., data = name_out(comp_data, "painting_code"), ntree = trees, do.trace = 500, mtry = 6)
+varImpPlot(comp_rf)
+comp_confusion <- as.data.frame(comp_rf$confusion)
+
+combined_rf <- randomForest(artist_union ~ ., data = name_out(motif_comp_data, "painting_code"), ntree = trees, do.trace = 500, mtry = 96)
+varImpPlot(combined_rf)
+combined_confusion <- as.data.frame(combined_rf$confusion)
+```
+
+```{r compare_models}
+long_confusion <- function(cf) {
+  cf <- name_in(cf, "actual")
+  cf %>% 
+    gather(projected, count, 1:nrow(cf))
+}
+
+error_only <- function(cf) {
+  long_confusion(cf) %>% 
+    select(class.error, actual) %>% 
+    distinct()
+}
+
+all_confusion <- bind_rows(
+  "motif" = error_only(motif_confusion),
+  "composition" = error_only(comp_confusion),
+  "combined" = error_only(combined_confusion),
+  .id = "model_type"
+) %>% 
+  mutate(attr_mod = stringr::str_extract(actual, "\\w+$"))
+
+confusion_matrix <- bind_rows(
+  "motif" = long_confusion(motif_confusion),
+  "composition" = long_confusion(comp_confusion),
+  "combined" = long_confusion(combined_confusion),
+  .id = "model_type"
+)
+
+library(ggplot2)
+
+ggplot(all_confusion, aes(x = actual, y = 1 - class.error, fill = model_type)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  theme_bw() +
+  scale_fill_brewer(palette = "Set2") +
+  theme(legend.position = "top") +
+  labs(x = NULL, y = "Success rate", fill = "Provided evidence") +
+  coord_flip()
+```
+
+```{r confusion_graph}
+library(ggraph)
+library(igraph)
+
+conf_graph <- graph_from_data_frame(select(confusion_matrix, actual, projected, count), directed = TRUE)
