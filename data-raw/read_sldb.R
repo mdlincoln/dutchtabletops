@@ -16,16 +16,7 @@ dt_artist_attributes <- sldb %>% gs_read(ws = "artist_attributes")
 # Create paintings tables ----
 
 # Parse year
-dt_paintings <- raw_paintings %>%
-  mutate(
-    # Extract the first 4 digit string and convert to integer
-    year = as.integer(str_extract(date_string, "\\d{4}")),
-    # Create a logical column indicating modifiers like c., mid, early, or late
-    is_approx_date = str_detect(date_string, "c\\.") |
-      str_detect(date_string, "mid") |
-      str_detect(date_string, "early") |
-      str_detect(date_string, "late")
-  )
+dt_paintings <- raw_paintings
 
 # Create motifs tables ----
 
@@ -45,6 +36,7 @@ dt_motif_labels <- raw_motifs %>% select(motif_code, motif_label)
 dt_motif_taxonomy <- raw_motifs %>%
   select(-motif_label) %>%
   gather(parent_no, parent, p1:p2) %>%
+  mutate(is_top_level = parent_no == "p1" & is.na(parent)) %>%
   select(-parent_no)
 
 # Create artists tables ----

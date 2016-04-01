@@ -1,33 +1,32 @@
-#' Dutch tabletop paintings
+#' DATASET TITLE
 #'
-#' These paintings
+#' DATASET DESCRIPTION
 #'
-#' @format A data frame with 629 rows and 24 variables:
+#' @format A data frame with 629 rows and 23 variables:
 #' \describe{
-#'   \item{\code{painting_code}}{character. Unique ID.}
-#'   \item{\code{artist}}{character. Attributed artist. See \code{is_after} and \code{is_uncertain}.}
-#'   \item{\code{is_after}}{logical. Is the artwork after the listed artist?}
-#'   \item{\code{artist_is_uncertain}}{logical. Is the artist attribution uncertain?}
-#'   \item{\code{painting_description}}{character. Free text description of the painting.}
-#'   \item{\code{thematic_format}}{character. ###}
-#'   \item{\code{compositional_format}}{character. ###}
-#'   \item{\code{compositional_disposition}}{character. ###}
-#'   \item{\code{compositional_cropping}}{character. ###}
-#'   \item{\code{compositional_viewpoint}}{character. ###}
-#'   \item{\code{significant_motifs}}{character. ###}
-#'   \item{\code{location}}{character. ###}
-#'   \item{\code{bibliography}}{character. ###}
-#'   \item{\code{date_string}}{character. ###}
-#'   \item{\code{year_early}}{character. ###}
-#'   \item{\code{year_late}}{character. ###}
-#'   \item{\code{dimensions}}{character. ###}
-#'   \item{\code{height}}{double. ###}
-#'   \item{\code{width}}{double. ###}
-#'   \item{\code{is_fragment}}{logical. ###}
-#'   \item{\code{support}}{character. ###}
-#'   \item{\code{inscriptions}}{character. ###}
-#'   \item{\code{illusionistic_signature}}{logical. ###}
-#'   \item{\code{has_inscribed_date}}{logical. ###}
+#'   \item{\code{painting_code}}{character. DESCRIPTION.}
+#'   \item{\code{artist}}{character. DESCRIPTION.}
+#'   \item{\code{painting_description}}{character. DESCRIPTION.}
+#'   \item{\code{thematic_format}}{character. DESCRIPTION.}
+#'   \item{\code{compositional_format}}{character. DESCRIPTION.}
+#'   \item{\code{compositional_disposition}}{character. DESCRIPTION.}
+#'   \item{\code{compositional_cropping}}{character. DESCRIPTION.}
+#'   \item{\code{compositional_viewpoint}}{character. DESCRIPTION.}
+#'   \item{\code{location}}{character. DESCRIPTION.}
+#'   \item{\code{bibliography}}{character. DESCRIPTION.}
+#'   \item{\code{date_string}}{character. DESCRIPTION.}
+#'   \item{\code{year_early}}{integer. DESCRIPTION.}
+#'   \item{\code{year_late}}{integer. DESCRIPTION.}
+#'   \item{\code{dimensions}}{character. DESCRIPTION.}
+#'   \item{\code{height}}{double. DESCRIPTION.}
+#'   \item{\code{width}}{double. DESCRIPTION.}
+#'   \item{\code{is_fragment}}{logical. DESCRIPTION.}
+#'   \item{\code{support}}{character. DESCRIPTION.}
+#'   \item{\code{inscriptions}}{character. DESCRIPTION.}
+#'   \item{\code{illusionistic_signature}}{logical. DESCRIPTION.}
+#'   \item{\code{has_inscribed_date}}{logical. DESCRIPTION.}
+#'   \item{\code{year}}{integer. DESCRIPTION.}
+#'   \item{\code{is_approx_date}}{logical. DESCRIPTION.}
 #' }
 "dt_paintings"
 
@@ -63,3 +62,29 @@
 #'   \item{\code{motif_code}}{character. ###}
 #' }
 "dt_painting_motifs"
+
+#' DATASET TITLE
+#'
+#' DATASET DESCRIPTION
+#'
+#' @format A data frame with 37 rows and 5 variables:
+#' \describe{
+#'   \item{\code{artist}}{character. DESCRIPTION.}
+#'   \item{\code{birth_early_year}}{integer. DESCRIPTION.}
+#'   \item{\code{birth_late_year}}{integer. DESCRIPTION.}
+#'   \item{\code{death_early_year}}{integer. DESCRIPTION.}
+#'   \item{\code{death_late_year}}{integer. DESCRIPTION.}
+#' }
+"dt_artist_attributes"
+
+#' DATASET TITLE
+#'
+#' DATASET DESCRIPTION
+#'
+#' @format A data frame with 120 rows and 3 variables:
+#' \describe{
+#'   \item{\code{painting_code}}{character. DESCRIPTION.}
+#'   \item{\code{artist}}{character. DESCRIPTION.}
+#'   \item{\code{artist_relationship}}{character. DESCRIPTION.}
+#' }
+"dt_painting_artist"
