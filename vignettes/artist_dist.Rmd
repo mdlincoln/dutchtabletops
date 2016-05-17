@@ -50,7 +50,7 @@ And all motifs can be laid out into an incidence matrix like so, with one row pe
 motif_data <- dt_painting_motifs %>% 
   left_join(dt_motif_taxonomy, by = "motif_code") %>% 
   mutate(parent = ifelse(is.na(parent), motif_code, parent)) %>% 
-  select(-motif_code) %>% 
+  select(-motif_code, -is_top_level) %>% 
   mutate(is_present = TRUE) %>%
   distinct() %>% 
   spread(key = parent, value = is_present, fill = FALSE, drop = FALSE)
@@ -102,7 +102,7 @@ rownames(motif_matrix) <- motif_data$painting_code
 motif_pca <- prcomp(motif_matrix, center = TRUE)
 
 motif_obs <- as.data.frame(motif_pca$x) %>% 
-  mutate(painting_code = rownames(motif_pca$x)) %>% 
+  mutate(painting_code = rownames(motif_pca$x), ecc = sqrt(PC1^2 + PC2^2)) %>% 
   left_join(dt_painting_artist, by = "painting_code")
 
 motif_rot <- as.data.frame(motif_pca$rotation) %>% 
@@ -119,17 +119,19 @@ motif_rot <- as.data.frame(motif_pca$rotation) %>%
 ```{r artist_motif_examples}
 artist_motif_plot <- function(artist_name) {
   motif_obs %>% 
-    mutate(highlight_artist = ifelse(artist %in% artist_name, artist, NA), point_size = ifelse(is.na(highlight_artist), 2, 5)) %>% 
+    unite(artist_complex, artist, artist_relationship, sep = " - ") %>% 
+    mutate(highlight_artist = ifelse(artist_complex %in% artist_name, artist_complex, NA), point_size = ifelse(is.na(highlight_artist), 2, 5)) %>% 
     ggplot(aes(x = PC1, y = PC2)) + 
     geom_segment(data = motif_rot, aes(xend = 0, yend = 0), color = "black") +
     geom_point(alpha = 0.7, aes(color = highlight_artist, size = point_size)) +
     geom_label(data = motif_rot, aes(label = motif_label)) +
     scale_size_identity() +
     scale_color_brewer(type = "qual", palette = "Set2", na.value = "gray") +
+    geom_label_repel(data = top_n(motif_obs, 10, ecc), aes(label = painting_code)) +
     theme_void() +
     theme(legend.position = "top")
 }
-artist_motif_plot(c("Floris van Dijck", "Willem Claesz Heda"))
+artist_motif_plot(c("Willem Claesz Heda - After", "Willem Claesz Heda - Definite", "Willem Claesz Heda - Possible"))
 ```
 
 # Paintings in composition space
@@ -246,7 +248,7 @@ oeuvre_motif_dist <- function(oeuvre, method = c("cosine", "asymm", "symm")) {
 
 oeuvre_comp_dist <- function(oeuvre) {
   odist <- oeuvre %>% 
-    select(compositional_format, compositional_cropping, compositional_viewpoint, height, width, illusionistic_signature) %>% 
+    select(compositional_format, compositional_cropping, compositional_viewpoint, illusionistic_signature) %>% 
     mutate_each(funs(as.factor), compositional_format, compositional_cropping, compositional_viewpoint) %>% 
     daisy(metric = "gower")
   
@@ -278,7 +280,7 @@ Artists with a high distance would have a more diverse oeuvre.
 per_artist_dist %>% 
   select(artist_detail, n_works, distance_type, mean_dist) %>% 
   spread(distance_type, mean_dist) %>% 
-  ggplot(aes(x = motif_asymm, y = composition, color = artist_detail)) +
+  ggplot(aes(x = motif_symm, y = composition, color = artist_detail)) +
   geom_point(aes(size = n_works)) +
   geom_label_repel(aes(label = paste(artist_detail, "-", n_works, "works"))) +
   scale_color_discrete(guide = FALSE)
