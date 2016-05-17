@@ -1,5 +1,4 @@
 library(dplyr)
-library(readr)
 library(tidyr)
 library(stringr)
 library(googlesheets)
@@ -52,3 +51,4 @@ dt_painting_artist <- bind_rows(
 
 
 devtools::use_data(dt_paintings, dt_painting_motifs, dt_motif_labels, dt_motif_taxonomy, dt_painting_artist, dt_artist_attributes, overwrite = TRUE)
+
