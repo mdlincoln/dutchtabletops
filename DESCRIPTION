@@ -13,6 +13,11 @@ License: MIT
 LazyData: TRUE
 Suggests:
     knitr,
-    rmarkdown
+    rmarkdown,
+    googlesheets,
+    dplyr,
+    plyr,
+    stringr,
+    tidyr
 VignetteBuilder: knitr
 RoxygenNote: 5.0.1
