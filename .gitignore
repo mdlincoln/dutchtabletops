@@ -3,7 +3,6 @@
 .RData
 *.Rproj
 inst/doc
-data/
 vignettes/*_cache
 vignettes/*.html
 vignettes/*_files
