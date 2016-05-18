@@ -11,12 +11,9 @@ Description: Database of 629 tabletop still life paintings by seventeenth-
 License: MIT
 LazyData: TRUE
 Suggests:
-    knitr,
-    rmarkdown,
     googlesheets,
     dplyr,
     plyr,
     stringr,
     tidyr
-VignetteBuilder: knitr
 RoxygenNote: 5.0.1
