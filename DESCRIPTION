@@ -2,7 +2,6 @@ Package: dutchtabletopsdata
 Type: Package
 Title: Data on Seventeenth-Century Dutch Tabletop Still Lifes
 Version: 0.1
-Date: 2015-09-23
 Authors@R: c(
   person("Matthew", "Lincoln", email = "matthew.d.lincoln@gmail.com",
     role = c("aut", "cre")),
