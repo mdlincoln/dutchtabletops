@@ -10,10 +10,14 @@ Description: Database of 629 tabletop still life paintings by seventeenth-
     century painters from Haarlem, coded by stylistic and iconographic properties.
 License: MIT
 LazyData: TRUE
-Suggests:
-    googlesheets,
+Imports:
     dplyr,
-    plyr,
+    tidyr,
+    randomForest,
     stringr,
-    tidyr
+    plyr,
+    ggplot,
+    ggrepel
+Suggests:
+    googlesheets
 RoxygenNote: 5.0.1
