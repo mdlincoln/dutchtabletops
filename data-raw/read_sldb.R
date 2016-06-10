@@ -29,7 +29,12 @@ dt_painting_motifs <- dt_paintings %>%
 dt_paintings <- dt_paintings %>% select(-significant_motifs, -artist)
 
 # Unique table of motif codes and their labels
-dt_motif_labels <- raw_motifs %>% select(motif_code, motif_label)
+dt_motif_labels <- raw_motifs %>%
+  left_join(select(raw_motifs, motif_code, p1_label = motif_label), by = c("p1" = "motif_code")) %>%
+  left_join(select(raw_motifs, motif_code, p2_label = motif_label), by = c("p2" = "motif_code")) %>%
+  mutate(full_motif_label = ifelse(is.na(p1_label), motif_label, ifelse(is.na(p2_label), paste(p1_label, motif_label, sep = " - "), paste(p1_label, p2_label, motif_label, sep = " - ")))) %>%
+  mutate(wrapped_motif_label = str_wrap(full_motif_label, width = 30)) %>%
+  select(motif_code, motif_label = full_motif_label, wrapped_motif_label)
 
 # Many to many table of motif codes and their parent values
 dt_motif_taxonomy <- raw_motifs %>%
