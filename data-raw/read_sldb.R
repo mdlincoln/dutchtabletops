@@ -77,6 +77,7 @@ dt_compiled <- dt_painting_motifs %>%
   spread(key = parent, value = is_present, fill = FALSE, drop = FALSE) %>%
   verify(is_unique(painting_code)) %>%
   inner_join(select(dt_painting_artist, painting_code, artist = artist1, artist_relationship = artist1_relationship), by = "painting_code") %>%
+  unite(artist_union, artist, artist_relationship, sep = " - ", remove = FALSE) %>%
   verify(is_unique(painting_code)) %>%
   # Attach compositional data
   inner_join(dt_paintings, by = "painting_code") %>%
