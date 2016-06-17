@@ -76,8 +76,6 @@ cross_named_lists <- function(l, ...) {
 #' @param ntree Number of trees to build. Defaults to 2000.
 #' @param proximity Whether to save proximity data or not. Defaults to TRUE.
 #' @param localImp Whether to save local importance data. Defaults to TRUE.
-#' @param do.trace Whether to show a progress indicator. When session is
-#'   interactive, defaults to tick every 100 trees.
 #' @param ... Other arguments to pass to
 #'   \code{\link[randomForest]{randomForest}}
 #'
@@ -85,9 +83,10 @@ cross_named_lists <- function(l, ...) {
 #'   \code{\link[randomForest]{randomForest}}.
 #'
 #' @export
-run_rf <- function(data, response, predictors, rownames = "painting_code", ntree = 2000, proximity = TRUE, localImp = TRUE, do.trace = ifelse(interactive(), 100, FALSE), subset = 1:nrow(data), ...) {
-  # Construct formula
+run_rf <- function(data, response, predictors, rownames = "painting_code", ntree = 2000, proximity = TRUE, localImp = TRUE, subset = 1:nrow(data), ...) {
+  # Construct and display formula
   formula_string <- paste0(response, " ~ ", paste0(setdiff(predictors, response), collapse = " + "))
+  message(formula_string)
   # Produce a dataframe with required columns, rownames, and converting
   # characters to factor (necessary for randomForest to recognize them as
   # categorical data)
@@ -95,7 +94,7 @@ run_rf <- function(data, response, predictors, rownames = "painting_code", ntree
     restore_rownames(rownames) %>%
     purrr::dmap_if(function(x) is.character(x) | is.logical(x), as.factor)
 
-  randomForest::randomForest(as.formula(formula_string), data = df, ntree = ntree, proximity = proximity, localImp = localImp, do.trace = do.trace, na.action = randomForest::na.roughfix, ...)
+  randomForest::randomForest(as.formula(formula_string), data = df, ntree = ntree, proximity = proximity, localImp = localImp, na.action = randomForest::na.roughfix, ...)
 }
 
 # Internal functions ----
