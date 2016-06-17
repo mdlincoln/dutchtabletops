@@ -83,3 +83,6 @@
 #'   \item{\code{artist_relationship}}{character. The type of relationship: "Definite", "After", "Possible", "Co-painter".}
 #' }
 "dt_painting_artist"
+
+#' Compiled model data
+"dt_compiled"
