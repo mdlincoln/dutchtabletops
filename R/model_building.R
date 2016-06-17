@@ -56,8 +56,12 @@ restore_rownames <- function(d, col_name) {
 #' @export
 cross_named_lists <- function(l, ...) {
   suppressWarnings({
+    cross_names <- ncnm <- map(l, names) %>%
+      cross_n() %>%
+      map_chr(function(x) paste(x, collapse = "."))
+
     purrr::cross_n(.l = l, ...) %>%
-      set_names(levels(interaction(map(l, names))))
+      set_names(cross_names)
   })
 }
 
