@@ -17,8 +17,12 @@ Imports:
     randomForest,
     stringr,
     plyr,
-    ggplot,
-    ggrepel
+    ggplot2,
+    ggrepel,
+    purrr
 Suggests:
-    googlesheets
+    googlesheets,
+    knitr,
+    rmarkdown
 RoxygenNote: 5.0.1
+VignetteBuilder: knitr

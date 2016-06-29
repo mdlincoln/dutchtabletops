@@ -1,0 +1,166 @@
+---
+title: "Vignette Title"
+author: "Vignette Author"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Vignette Title}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r libraries, include = FALSE}
+library(dutchtabletopsdata)
+library(purrr)
+library(dplyr)
+library(ggplot2)
+library(ggrepel)
+```
+
+## What are random forests? Why use them?
+
+Random forests are an example of an _ensemble machine learning method_ that works by running many iterations of the same type of model and combining their results in an effort to avoid overfitting.
+The core model of random forests are, appropriately, decision trees.
+A single decision tree works by finding a split in one of the _predictor variables_ (say, all horizontal paintings over here, all horiztonal ones over here) that does the best job at sorting out paintings based on the given _repsonse variable_ (e.g., which artist painted it.), techinically known as asessing its _node purity_.
+One variable split likely does a mediocre job of predicting the response variable, thus the process is repeated, finding the best variable splits for each one of the branches produced by the first split, then the best splits for all the brances produced by that step, and so forth.
+Single decision trees can keep producing branches until they have perfectly memorized the data.
+Much like an undergraduate who aces the slide ID portion of the art history exam, but bombs the unknown image section, a single tree will perfectly reproduce the data you give it, but does poorly when given new cases that might have slightly different attributes than those it learned from.
+
+Random forests work by creating hundreds or thousands of decision trees, giving each a slightly different subset of the original data to learn. Then, having built each of these trees, the model polls this "forest" in order to classify new data into different categories.
+In the case of a model learning to recognize artists based on the motifs used in paintings, some paintings may elicit an overwhelmingly lopsided decision by the forest when it is particularly sure of which attribution to give.
+Other paintings, however, may provoke more confusion - their attribution, in other words, may not be supportable based on motif information _alone_.
+
+Random forests are particularly appropriate for our use for several reasons:
+
+1. They work relatively well on small samples of data that have a large number of descriptive variables
+1. Random forests performs well on systems where there are complex interactions between variables (e.g., lemon plus wine but _without_ oysters tends to be a painitng by...)
+
+## Building the random forests
+
+There are three main parameters to any of these models:
+
+1. Predictor variables: what variables will the model use to make that prediction?
+  1. Motif variables only
+  1. Composition variables only
+    - With dimension informaion? Without?
+  1. All available variables
+1. Response variable: what categorical or scalar value are we attempting to predict?
+  1. An unqualified artist attribution (e.g "Pieter Claesz")
+  1. A qualified attribution ("after Pieter Claesz", "possibly Pieter Claesz")
+  1. Some other variable, e.g. general compositional scheme
+1. Data subset: What subset of the available observations (in this case, paintings) will the model use to make predictions? Just those paintings with definitve attributions? All available paintings? Paintings from a given period of time?
+
+Because we may be interested in any number of combinations of these three parameters, we'll produce random forests for every combination up front, allowing easier exploration on the back end.
+
+```{r model_specs, message=FALSE}
+# Model artists with only n or more paintings
+n_ptg <- 10
+cleared_artists <- unique(filter(group_by(dt_compiled, artist), n() >= n_ptg)$artist)
+cleared_artist_union <- unique(filter(group_by(dt_compiled, artist_union), n() >= n_ptg)$artist_union)
+
+# Model specifications
+model_predictors <- list(
+  motif_only = motif_vars(),
+  composition_only = comp_vars(),
+  comp_nodim = setdiff(comp_vars(), c("height", "width")),
+  combined = c(motif_vars(), comp_vars())
+)
+
+model_response <- list(
+  simple = "artist",
+  qualified = "artist_union",
+  comp_disp = "compositional_disposition",
+  year = "year_early"
+)
+
+model_subsets <- list(
+  definite_only = which(dt_compiled$artist_relationship == "Definite" & dt_compiled$artist_union %in% cleared_artist_union),
+  all_qualifications = which(dt_compiled$artist_union %in% cleared_artist_union)
+)
+
+# Produce all combinations (the dot product) of these three model paramenters
+model_params <- list(predictors = model_predictors, response = model_response, subsets = model_subsets) %>% 
+  cross_named_lists()
+
+# Actually run the models
+rfl <- map(model_params, function(x) run_rf(dt_compiled, response = x$response, predictors = x$predictors, ntree = 500, subset = x$subsets))
+
+# Add the resulting random forest type ("classification" or "regression") to the
+# model name
+names(rfl) <- map2_chr(rfl, names(rfl), function(x, y) {
+  type <- x$type
+  paste(y, type, sep = ".")
+})
+```
+
+## Which artists were predictable by their chosen motifs? Their chosen compositions?
+
+One core question: are certain artists more or less predictable by their 
+
+```{r class_errors}
+# Produce a long table of model error: how often was a given model "wrong" about
+# the category in which it placed an artwork?
+rfl_df <- rfl %>% 
+  keep(function(x) x$type == "classification") %>% 
+  map_df(error_only, .id = "model_type") %>% 
+  separate(model_type, into = c("predictors", "response", "subset", "forest_type"), sep = "\\.")
+```
+
+```{r plot_errors}
+per_artist_error <- rfl_df %>% 
+  filter(response == "qualified" & predictors %in% c("motif_only", "composition_only")) %>% 
+  select(-response, -forest_type) %>% 
+  ungroup() %>% 
+  spread(predictors, class.error) %>% 
+  separate(actual, into = c("artist", "qualification"), sep = " - ") %>% 
+  filter(qualification %in% c("After", "Definite", "Possible"))
+
+ggplot(per_artist_error, aes(x = composition_only, y = motif_only, color = artist)) +
+  geom_point(aes(shape = qualification), size = 7, alpha = 0.5) +
+  theme_bw() +
+  geom_label_repel(aes(label = artist)) +
+  facet_wrap(~ subset)
+```
+
+## Local variable importance
+
+```{r pca}
+single_rf <- rfl$motif_only.simple.all_qualifications
+
+rfl_pca <- map(set_names(cleared_artists), function(x) {
+  rf_local_importance(single_rf) %>% 
+    semi_join(dt_compiled %>% filter(artist == x), by = c("rowname" = "painting_code")) %>% 
+    restore_rownames("rowname") %>% 
+    prcomp()
+})
+
+rfl_loadings <- map(rfl_pca, function(x) {
+  pca_loadings_df(x) %>%
+    left_join(dt_motif_labels, by = c("rowname" = "motif_code")) %>% 
+    mutate(varlab = ifelse(is.na(wrapped_motif_label), rowname, motif_label))
+})
+
+rfl_observations <- map(rfl_pca, function(x) {
+  pca_obs_df(x)
+})
+
+
+artist_motif_plot <- function(l, o, m = 12, hue = "red") {
+  l %>% 
+    filter(min_rank(desc(power)) <= m) %>% 
+    ggplot(aes(x = PC1, y = PC2)) +
+    geom_text(data = o, aes(label = rownames), alpha = 0.5) +
+    geom_segment(aes(xend = 0, yend = 0), color = hue) +
+    geom_label_repel(aes(label = varlab))
+}
+
+rfl_plots <- map2(rfl_loadings, rfl_observations, artist_motif_plot) %>% 
+  map2(., names(rfl_observations), function(x, y) x + ggtitle(y))
+
+full_pca <- rfl$motif_only.simple.all_qualifications %>% 
+  rf_local_importance() %>% 
+  prcomp()
+
+full_plot <- artist_motif_plot(rfl_loadings(full_pca), rfl_observations(full_pca))
+```
+
