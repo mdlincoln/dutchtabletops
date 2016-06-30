@@ -13,6 +13,7 @@ vignette: >
 library(dutchtabletopsdata)
 library(purrr)
 library(dplyr)
+library(tibble)
 library(ggplot2)
 library(ggrepel)
 ```
@@ -125,24 +126,24 @@ ggplot(per_artist_error, aes(x = composition_only, y = motif_only, color = artis
 ## Local variable importance
 
 ```{r pca}
-single_rf <- rfl$motif_only.simple.all_qualifications
+single_rf <- rfl$motif_only.simple.all_qualifications.classification
 
 rfl_pca <- map(set_names(cleared_artists), function(x) {
   rf_local_importance(single_rf) %>% 
     semi_join(dt_compiled %>% filter(artist == x), by = c("rowname" = "painting_code")) %>% 
-    restore_rownames("rowname") %>% 
+    column_to_rownames("rowname") %>% 
     prcomp()
 })
 
-rfl_loadings <- map(rfl_pca, function(x) {
-  pca_loadings_df(x) %>%
+join_loadings <- function(pca) {
+  pca_loadings_df(pca) %>% 
     left_join(dt_motif_labels, by = c("rowname" = "motif_code")) %>% 
     mutate(varlab = ifelse(is.na(wrapped_motif_label), rowname, motif_label))
-})
+}
 
-rfl_observations <- map(rfl_pca, function(x) {
-  pca_obs_df(x)
-})
+rfl_loadings <- map(rfl_pca, join_loadings)
+
+rfl_observations <- map(rfl_pca, pca_obs_df)
 
 
 artist_motif_plot <- function(l, o, m = 12, hue = "red") {
@@ -157,10 +158,15 @@ artist_motif_plot <- function(l, o, m = 12, hue = "red") {
 rfl_plots <- map2(rfl_loadings, rfl_observations, artist_motif_plot) %>% 
   map2(., names(rfl_observations), function(x, y) x + ggtitle(y))
 
-full_pca <- rfl$motif_only.simple.all_qualifications %>% 
+```
+
+```{r}
+full_pca <- rfl$motif_only.simple.all_qualifications.classification %>% 
   rf_local_importance() %>% 
+  column_to_rownames() %>% 
   prcomp()
 
-full_plot <- artist_motif_plot(rfl_loadings(full_pca), rfl_observations(full_pca))
+full_plot <- artist_motif_plot(join_loadings(full_pca), pca_obs_df(full_pca))
+plot(full_plot)
 ```
 

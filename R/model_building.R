@@ -27,23 +27,6 @@ comp_vars <- function() {
     "is_fragment", "support", "illusionistic_signature", "has_inscribed_date")
 }
 
-#' Restore rownames
-#'
-#' Convenince function to restore rownames to a data.frame from a specified
-#' column. Rownames are usually eliminated by dplyr functions, but they have
-#' their uses when computing models.
-#'
-#' @param d Data frame
-#' @param col_name Quoted column name to be removed and written as rownames
-#'
-#' @seealso This is an inverse of \link[dplyr]{add_rownames}
-#' @export
-restore_rownames <- function(d, col_name) {
-  rownames(d) <- d[[col_name]]
-  d[[col_name]] <- NULL
-  return(d)
-}
-
 #' Cross two named lists, preserving names
 #'
 #' @param l A named list of named lists
@@ -55,14 +38,12 @@ restore_rownames <- function(d, col_name) {
 #'
 #' @export
 cross_named_lists <- function(l, ...) {
-  suppressWarnings({
-    cross_names <- ncnm <- map(l, names) %>%
-      cross_n() %>%
-      map_chr(function(x) paste(x, collapse = "."))
+  cross_names <- map(l, names) %>%
+    cross_n() %>%
+    map_chr(paste, collapse = ".")
 
-    purrr::cross_n(.l = l, ...) %>%
-      set_names(cross_names)
-  })
+  cross_n(.l = l, ...) %>%
+    set_names(cross_names)
 }
 
 #' Run a randomForest model with helpful defaults for this particular dataset
@@ -95,7 +76,7 @@ run_rf <- function(data, response, predictors, rownames = "painting_code", ntree
   # characters to factor (necessary for randomForest to recognize them as
   # categorical data)
   df <- data[subset, ] %>%
-    restore_rownames(rownames) %>%
+    tibble::column_to_rownames(rownames) %>%
     purrr::dmap_if(function(x) is.character(x) | is.logical(x), as.factor)
 
   randomForest::randomForest(as.formula(formula_string), data = df, ntree = ntree, proximity = proximity, localImp = localImp, na.action = randomForest::na.roughfix, ...)

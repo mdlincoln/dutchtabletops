@@ -19,6 +19,7 @@ Imports:
     plyr,
     ggplot2,
     ggrepel,
+    tibble,
     purrr
 Suggests:
     googlesheets,
