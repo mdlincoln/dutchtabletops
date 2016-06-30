@@ -7,6 +7,6 @@
 #'
 #' @export
 multiplot <- function(p, filetypes = c("pdf", "svg", "png"), filenames = paste0("inst/plots/", filetypes, "/", deparse(substitute(p)), ".", filetypes), ...) {
-  walk(filenames, function(x) ggplot2::ggsave(filename = x, plot = p, ...))
+  purrr::walk(filenames, function(x) ggplot2::ggsave(filename = x, plot = p, ...))
   plot(p)
 }
