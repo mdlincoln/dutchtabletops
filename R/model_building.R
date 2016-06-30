@@ -75,11 +75,26 @@ run_rf <- function(data, response, predictors, rownames = "painting_code", ntree
   # Produce a dataframe with required columns, rownames, and converting
   # characters to factor (necessary for randomForest to recognize them as
   # categorical data)
-  df <- data[subset, ] %>%
-    tibble::column_to_rownames(rownames) %>%
-    purrr::dmap_if(function(x) is.character(x) | is.logical(x), as.factor)
+  df <- prep_vars(data, rownames)[subset, ]
+  # Re-factor the response variable so that it has no empty levels (otherwise
+  # randomForest will throw a tantrum.)
+  df[[response]] <- as.factor(as.character(df[[response]]))
 
   randomForest::randomForest(as.formula(formula_string), data = df, ntree = ntree, proximity = proximity, localImp = localImp, na.action = randomForest::na.roughfix, ...)
+}
+
+#' Prepare data frames for model building and prediction
+#'
+#' Cast strings and logical vectors as factors, and move specified column name to rownames
+#'
+#' @param x Data frame
+#' @param rownames Quoted column name containting rownames. If NULL, no rownames are added.
+#'
+#' @export
+prep_vars <- function(x, rownames) {
+  x %>%
+    tibble::column_to_rownames(rownames) %>%
+    purrr::dmap_if(function(x) is.character(x) | is.logical(x), as.factor)
 }
 
 # Internal functions ----
