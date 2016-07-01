@@ -68,18 +68,22 @@ cross_named_lists <- function(l, ...) {
 #'   \code{\link[randomForest]{randomForest}}.
 #'
 #' @export
-run_rf <- function(data, response, predictors, rownames = "painting_code", ntree = 2000, proximity = TRUE, localImp = TRUE, subset = 1:nrow(data), ...) {
-  # Construct and display formula
-  formula_string <- paste0(response, " ~ ", paste0(setdiff(predictors, response), collapse = " + "))
+run_rf <- function(data, response, predictors, rownames = "painting_code", ntree = 2000, proximity = TRUE, localImp = TRUE, ...) {
+
   # Produce a dataframe with required columns, rownames, and converting
   # characters to factor (necessary for randomForest to recognize them as
   # categorical data)
-  df <- prep_vars(data, rownames)[subset, ]
+  df <- data %>%
+    select(one_of(c(response, rownames, setdiff(predictors, response)))) %>%
+    prep_vars() %>%
+    tibble::column_to_rownames(var = rownames) %>%
+    na.roughfix()
   # Re-factor the response variable so that it has no empty levels (otherwise
   # randomForest will throw a tantrum.)
-  df[[response]] <- as.factor(as.character(df[[response]]))
+  y <- as.factor(as.character(df[[response]]))
+  df[[response]] <- NULL
 
-  randomForest::randomForest(as.formula(formula_string), data = df, ntree = ntree, proximity = proximity, localImp = localImp, na.action = randomForest::na.roughfix, ...)
+  randomForest::randomForest(x = df, y = y, ntree = ntree, proximity = proximity, localImp = localImp, ...)
 }
 
 #' Prepare data frames for model building and prediction
@@ -90,9 +94,8 @@ run_rf <- function(data, response, predictors, rownames = "painting_code", ntree
 #' @param rownames Quoted column name containting rownames. If NULL, no rownames are added.
 #'
 #' @export
-prep_vars <- function(x, rownames) {
+prep_vars <- function(x) {
   x %>%
-    tibble::column_to_rownames(rownames) %>%
     purrr::dmap_if(function(x) is.character(x) | is.logical(x), as.factor)
 }
 

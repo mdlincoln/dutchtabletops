@@ -1,10 +1,10 @@
 ---
-title: "Vignette Title"
-author: "Vignette Author"
+title: "Form and Content in 17th-Century Haarlem Still Lifes"
+author: "Matthew Lincoln"
 date: "`r Sys.Date()`"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Vignette Title}
+  %\VignetteIndexEntry{Form and Content in 17th-Century Haarlem Still Lifes}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -13,9 +13,11 @@ vignette: >
 library(dutchtabletopsdata)
 library(purrr)
 library(dplyr)
+library(tidyr)
 library(tibble)
 library(ggplot2)
 library(ggrepel)
+library(randomForest)
 ```
 
 ## What are random forests? Why use them?
@@ -59,6 +61,9 @@ n_ptg <- 10
 cleared_artists <- unique(filter(group_by(dt_compiled, artist), n() >= n_ptg)$artist)
 cleared_artist_union <- unique(filter(group_by(dt_compiled, artist_union), n() >= n_ptg)$artist_union)
 
+dt_valid <- dt_compiled %>% 
+  filter(artist %in% cleared_artists, artist_union %in% cleared_artist_union)
+
 # Model specifications
 model_predictors <- list(
   motif_only = motif_vars(),
@@ -75,16 +80,16 @@ model_response <- list(
 )
 
 model_subsets <- list(
-  definite_only = which(dt_compiled$artist_relationship == "Definite" & dt_compiled$artist_union %in% cleared_artist_union),
-  all_qualifications = which(dt_compiled$artist_union %in% cleared_artist_union)
+  definite_only = which(dt_valid$artist_relationship == "Definite" & dt_valid$artist_union %in% cleared_artist_union & dt_valid$artist %in% cleared_artists),
+  all_qualifications = which(dt_valid$artist_union %in% cleared_artist_union & dt_valid$artist %in% cleared_artists)
 )
 
-# Produce all combinations (the dot product) of these three model paramenters
+# Produce all combinations (the dot product) of these three model parameters
 model_params <- list(predictors = model_predictors, response = model_response, subsets = model_subsets) %>% 
   cross_named_lists()
 
 # Actually run the models
-rfl <- map(model_params, function(x) run_rf(dt_compiled, response = x$response, predictors = x$predictors, ntree = 500, subset = x$subsets))
+rfl <- map(model_params, function(x) run_rf(dt_valid, response = x$response, predictors = x$predictors, ntree = 500, subset = x$subsets))
 
 # Add the resulting random forest type ("classification" or "regression") to the
 # model name
@@ -96,7 +101,7 @@ names(rfl) <- map2_chr(rfl, names(rfl), function(x, y) {
 
 ## Which artists were predictable by their chosen motifs? Their chosen compositions?
 
-One core question: are certain artists more or less predictable by their 
+One core question: are certain artists more or less predictable by the motifs they choose, and/or by the compositions they use to arrange those motifs?
 
 ```{r class_errors}
 # Produce a long table of model error: how often was a given model "wrong" about
@@ -109,28 +114,164 @@ rfl_df <- rfl %>%
 
 ```{r plot_errors}
 per_artist_error <- rfl_df %>% 
-  filter(response == "qualified" & predictors %in% c("motif_only", "composition_only")) %>% 
+  filter(response == "qualified" & subset == "all_qualifications" & predictors %in% c("motif_only", "composition_only")) %>% 
   select(-response, -forest_type) %>% 
   ungroup() %>% 
   spread(predictors, class.error) %>% 
   separate(actual, into = c("artist", "qualification"), sep = " - ") %>% 
   filter(qualification %in% c("After", "Definite", "Possible"))
 
-ggplot(per_artist_error, aes(x = composition_only, y = motif_only, color = artist)) +
-  geom_point(aes(shape = qualification), size = 7, alpha = 0.5) +
+pae <- ggplot(per_artist_error, aes(x = composition_only, y = motif_only, color = artist)) +
+  annotate("segment", x = 0.5, xend = 0.5, y = -Inf, yend = Inf) +
+  annotate("segment", x = -Inf, xend = Inf, y = 0.5, yend = 0.5) +
+  annotate("text", label = "Unpredictable Composition\nUnpredictable Motifs", x = 0.75, y = 0.75) +
+  annotate("text", label = "Predictable Composition\nUnpredictable Motifs", x = 0.25, y = 0.75) +
+  annotate("text", label = "Predictable Composition\nPredictable Motifs", x = 0.25, y = 0.25) +
+  annotate("text", label = "Unpredictable Composition\nPredictable Motifs", x = 0.75, y = 0.25) +
+  geom_point(aes(shape = qualification), size = 5) +
   theme_bw() +
   geom_label_repel(aes(label = artist)) +
-  facet_wrap(~ subset)
+  scale_colour_brewer(palette = "Dark2", guide = FALSE) +
+  theme(legend.position = "top") +
+  xlim(0, 1) + ylim(0, 1) +
+  labs(x = "Composition predictors", y = "Motif predictors", shape = "Attribution qualification")
+
+multiplot(pae, height = 7, width = 10)
 ```
+
+Several points of note:
+
+1. Those paintings whose attribution is qualified as "Possible" are the most confusing to the model; both Willem Claesz Heda and Pieter Claes "possible" paintings have at or near 100% error based on either motif or compositional predictors.
+1. Gerrit Heda is a mercurial painter: of the "Definite" attributions, the model is mistaken more that 75% of the time when trying to attribute them on either motif or compositional predictors. Cornelis Mahu is also unpredictable by both counts.
+1. Floris van Dijck and Floris van Schooten, on the other hand, are relatively more precitable, with Van Dijck's compositions distinct enough that the model can predict his paintings with 90% accuracy when looking only at compositions, and Van Schooten's works with about 80% accuracy when just looking at motifs.
+
+Things get complex when looking at the difference between unqualified Willem Claesz Heda and Pieter Claesz attributions, and those attributions that are "after" the style of WCH or PC.
+Known paintings by Pieter Claesz are predictable by their motifs - the most predictable of any class of paintings in the database, and relatively predictable by their composiitons.
+On the other hand, those paintings done in the style of Pieter Claesz by a student or imitator have a much wider range of composiitonal arrangmenets that render them unpredictable by composition alone.
+"After Pieter Claesz" paintings are somewhat predictable by motif, but much less so than their definitively-attributed counterparts.
+What is more, their compositions are far more heterodox, suggesting that imitators of Claesz paid little heed to his particular modes of arranging objects, and only some attention to the types of objects he commonly included in his scenes.
+The market for Pieter Claesz-like paintings apparently had little interest in the unique objects or compositions that Claesz himself 
+
+Not so for Willem Claesz Heda derivatives.
+Paintings after Heda are actally slightly _more_ predictable than the definitely-identified ones, at least when judging by their motifs.
+Whereas derivatives of Claesz had a very wide visual range, those of Heda were much more specific.
+The idea of a "Heda" painting was apparently more constricted than was the conception of a "Claesz".
+
+This difference points to the complexity of this seemingly-bounded genre of painting production.
+Claesz and Heda were contemporaries, thus we are not 
+
+## Comparing known to unknown quantities
+
+```{r test_known_only, eval = FALSE}
+# This is a bad way to test, because it tests the same ones it saw
+known_only_motif <- rfl$motif_only.simple.definite_only.classification
+known_only_comp <- rfl$composition_only.simple.definite_only.classification
+
+run_prediction_error <- function(model) {
+  pv <- dt_compiled %>% 
+    filter(artist %in% cleared_artists) %>% 
+    prep_vars("painting_code") %>% 
+    predict(model, newdata = ., type = "class")
+  
+  pvd <- data_frame(predicted = as.character(pv)) %>% 
+    mutate(painting_code = names(pv))
+  
+  dt_compiled %>% 
+    select(painting_code, artist, artist_relationship) %>% 
+    inner_join(pvd, by = "painting_code") %>% 
+    mutate(incorrect = artist != predicted) %>% 
+    group_by(artist, artist_relationship) %>% 
+    summarize(error = mean(incorrect)) %>% 
+    ungroup() %>% 
+    complete(artist, artist_relationship)
+}
+
+# known_only_motif %>% 
+#   run_prediction_error() %>% 
+#   ggplot(aes(x = artist, y = error, fill = artist_relationship)) +
+#   geom_bar(stat = "identity", position = "dodge")
+# 
+# known_only_comp %>% 
+#   run_prediction_error() %>% 
+#   ggplot(aes(x = artist, y = error, fill = artist_relationship)) +
+#   geom_bar(stat = "identity", position = "dodge")
+
+known_error <- bind_rows(
+  "motif" = run_prediction_error(known_only_motif),
+  "composition" = run_prediction_error(known_only_comp),
+  .id = "type") %>% 
+  spread(type, error) %>% 
+  filter(artist_relationship %in% c("After", "Definite", "Possible"))
+
+ggplot(known_error, aes(x = composition, y = motif, color = artist, shape = artist_relationship)) +
+  geom_point(size = 5) +
+  geom_label_repel(aes(label = artist)) +
+  xlim(0, 1) + ylim(0, 1)
+```
+
+```{r known_only_test}
+fctr_dt_compiled <- prep_vars(dt_compiled)
+
+known_artist_subset <- fctr_dt_compiled %>% 
+  filter(artist_relationship == "Definite" & artist %in% cleared_artists)
+
+test_predictors <- fctr_dt_compiled %>% 
+  filter(artist_relationship != "Definite" & artist %in% known_artist_subset$artist)
+
+rf_rn <- function(df, rownames, predictors) {
+  df %>% 
+    na.roughfix() %>% 
+    select(one_of(c("artist", rownames, predictors))) %>% 
+    column_to_rownames(var = rownames)
+}
+
+kunk_rf <- function(train, test, predictors) {
+  train_df <- rf_rn(train, "painting_code", predictors)
+  test_df <- rf_rn(test, "painting_code", predictors)
+  train_response <- as.factor(as.character(train_df$artist))
+  test_response <- factor(as.character(test_df$artist), levels = levels(train_response))
+  train_df$artist <- NULL
+  test_df$artist <- NULL
+  
+  randomForest(x = train_df, y = train_response, xtest = test_df, ytest = test_response, ntree = 2000, importance = TRUE, localImp = TRUE, proximity = TRUE)
+}
+
+motif_trf <- kunk_rf(train = known_artist_subset, test = test_predictors, predictors = motif_vars())
+comp_trf <- kunk_rf(train = known_artist_subset, test = test_predictors, predictors = comp_vars())
+
+trf_votes <- bind_rows(
+  motif = test_confusion(motif_trf, "painting_code", ytest = test_predictors$artist),
+  comp = test_confusion(comp_trf, "painting_code", ytest = test_predictors$artist),
+  .id = "predictor_type"
+) %>% 
+  inner_join(select(dt_compiled, painting_code, artist_relationship), by = "painting_code") %>% 
+  group_by(predictor_type, actual, artist_relationship) %>% 
+  summarize(error = 1 - mean(correct)) %>% 
+  spread(predictor_type, error)
+
+ggplot(trf_votes, aes(x = comp, y = motif, color = actual, shape = artist_relationship)) +
+  geom_point(size = 5) +
+  geom_label_repel(aes(label = actual)) +
+  annotate("segment", x = 0.5, xend = 0.5, y = -Inf, yend = Inf) +
+  annotate("segment", x = -Inf, xend = Inf, y = 0.5, yend = 0.5) +
+  annotate("text", label = "Unpredictable Composition\nUnpredictable Motifs", x = 0.75, y = 0.75) +
+  annotate("text", label = "Predictable Composition\nUnpredictable Motifs", x = 0.25, y = 0.75) +
+  annotate("text", label = "Predictable Composition\nPredictable Motifs", x = 0.25, y = 0.25) +
+  annotate("text", label = "Unpredictable Composition\nPredictable Motifs", x = 0.75, y = 0.25) +
+  theme_bw() +
+  xlim(0, 1) + ylim(0, 1)
+
+```
+
 
 ## Local variable importance
 
 ```{r pca}
-single_rf <- rfl$motif_only.simple.all_qualifications.classification
+single_rf <- rfl$motif_only.simple.definite_only.classification
 
-rfl_pca <- map(set_names(cleared_artists), function(x) {
+rfl_pca <- map(set_names(levels(single_rf$predicted)), function(x) {
   rf_local_importance(single_rf) %>% 
-    semi_join(dt_compiled %>% filter(artist == x), by = c("rowname" = "painting_code")) %>% 
+    semi_join(dt_compiled %>% filter(artist == x[1]), by = c("rowname" = "painting_code")) %>% 
     column_to_rownames("rowname") %>% 
     prcomp()
 })
@@ -161,7 +302,7 @@ rfl_plots <- map2(rfl_loadings, rfl_observations, artist_motif_plot) %>%
 ```
 
 ```{r}
-full_pca <- rfl$motif_only.simple.all_qualifications.classification %>% 
+full_pca <- rfl$motif_only.simple.definite_only.classification %>% 
   rf_local_importance() %>% 
   column_to_rownames() %>% 
   prcomp()

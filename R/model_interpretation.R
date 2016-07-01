@@ -20,6 +20,25 @@ rf_votes <- function(rf) {
   tibble::rownames_to_column(as.data.frame(rf$votes), var = "painting_code")
 }
 
+#' Build a confusion data frame for the test component of a random forest
+#'
+#' @param rf A randomForest object with a \code{test} component
+#' @param rownames The name of the column rownames will be written to
+#' @param ytest The actual test values
+#'
+#' @export
+test_confusion <- function(rf, rownames, ytest) {
+  stopifnot(!is.null(rf$test))
+  rf$test$votes %>%
+    as.data.frame() %>%
+    rownames_to_column(var = rownames) %>%
+    gather_(key_col = "predicted", value_col = "votes", gather_cols = setdiff(names(.), rownames)) %>%
+    group_by_(rownames) %>%
+    filter(min_rank(desc(votes)) == 1) %>%
+    ungroup() %>%
+    mutate(actual = as.character(ytest), correct = predicted == actual)
+}
+
 #' Create a PCA of local importance measures from a random forest
 #' @export
 pca_rf <- function(rf, .filter = function(x) return(x)) {

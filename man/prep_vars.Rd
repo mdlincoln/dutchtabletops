@@ -4,7 +4,7 @@
 \alias{prep_vars}
 \title{Prepare data frames for model building and prediction}
 \usage{
-prep_vars(x, rownames)
+prep_vars(x)
 }
 \arguments{
 \item{x}{Data frame}
