@@ -71,7 +71,6 @@ cross_named_lists <- function(l, ...) {
 run_rf <- function(data, response, predictors, rownames = "painting_code", ntree = 2000, proximity = TRUE, localImp = TRUE, subset = 1:nrow(data), ...) {
   # Construct and display formula
   formula_string <- paste0(response, " ~ ", paste0(setdiff(predictors, response), collapse = " + "))
-  message(formula_string)
   # Produce a dataframe with required columns, rownames, and converting
   # characters to factor (necessary for randomForest to recognize them as
   # categorical data)
