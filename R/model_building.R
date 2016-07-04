@@ -68,23 +68,33 @@ cross_named_lists <- function(l, ...) {
 #'   \code{\link[randomForest]{randomForest}}.
 #'
 #' @export
-run_rf <- function(data, response, predictors, rownames = "painting_code", portion, ntree = 2000, proximity = TRUE, localImp = TRUE, ...) {
+run_rf <- function(data, response, predictors, rownames = "painting_code", portion, tests, ntree = 2000, proximity = TRUE, localImp = TRUE, ...) {
 
   # Produce a dataframe with required columns, rownames, and converting
   # characters to factor (necessary for randomForest to recognize them as
   # categorical data)
+
   df <- data %>%
     select(one_of(c(response, rownames, setdiff(predictors, response)))) %>%
     prep_vars() %>%
-    tibble::column_to_rownames(var = rownames) %>%
-    na.roughfix() %>%
-    filter(row_number() %in% portion)
+    na.roughfix()
+
+  x <- df %>%
+    filter(row_number() %in% portion) %>%
+    tibble::column_to_rownames(rownames)
   # Re-factor the response variable so that it has no empty levels (otherwise
   # randomForest will throw a tantrum.)
-  y <- as.factor(as.character(df[[response]]))
-  df[[response]] <- NULL
+  y <- x[[response]]
+  x[[response]] <- NULL
 
-  rf <- randomForest::randomForest(x = df, y = y, ntree = ntree, proximity = proximity, localImp = localImp, ...)
+  tx <- df %>%
+    filter(row_number() %in% tests) %>%
+    tibble::column_to_rownames(rownames)
+  ty <- tx[[response]]
+  tx[[response]] <- NULL
+
+
+  rf <- randomForest::randomForest(x = x, y = y, xtest = tx, ytest = ty, ntree = ntree, proximity = proximity, localImp = localImp, keep.forest = TRUE, ...)
   attr(rf, "response") <- response
   attr(rf, "predictors") <- predictors
   attr(rf, "rownames") <- rownames

@@ -4,14 +4,12 @@
 \alias{test_confusion}
 \title{Build a confusion data frame for the test component of a random forest}
 \usage{
-test_confusion(rf, rownames, ytest)
+test_confusion(rf, rownames = "actual")
 }
 \arguments{
 \item{rf}{A randomForest object with a \code{test} component}
 
 \item{rownames}{The name of the column rownames will be written to}
-
-\item{ytest}{The actual test values}
 }
 \description{
 Build a confusion data frame for the test component of a random forest

@@ -24,20 +24,28 @@ rf_votes <- function(rf) {
 #'
 #' @param rf A randomForest object with a \code{test} component
 #' @param rownames The name of the column rownames will be written to
-#' @param ytest The actual test values
 #'
 #' @export
-test_confusion <- function(rf, rownames, ytest) {
-  stopifnot(!is.null(rf$test))
-  rf$test$votes %>%
+test_confusion <- function(rf, rownames = "actual") {
+  stopifnot(!is.null(rf$test$votes))
+  rf$test$confusion %>%
     as.data.frame() %>%
     rownames_to_column(var = rownames) %>%
-    gather_(key_col = "predicted", value_col = "votes", gather_cols = setdiff(names(.), rownames)) %>%
-    group_by_(rownames) %>%
-    filter(min_rank(desc(votes)) == 1) %>%
-    ungroup() %>%
-    mutate(actual = as.character(ytest), correct = predicted == actual)
+    gather_(key_col = "predicted", value_col = "ratio", gather_cols = setdiff(names(.), rownames))
 }
+
+#' Get test error
+#'
+#' @export
+test_error <- function(rf) {
+  test_confusion(rf) %>%
+    filter(predicted == "class.error" & !is.nan(ratio)) %>%
+    select(actual, ratio)
+}
+
+# %>%
+#   ungroup() %>%
+#   mutate(actual = as.character(ytest), correct = predicted == actual)
 
 #' Create a PCA of local importance measures from a random forest
 #' @export

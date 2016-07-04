@@ -5,7 +5,7 @@
 \title{Render ggplot while also writing multiple versions to disk}
 \usage{
 multiplot(p, filetypes = c("pdf", "svg", "png"),
-  filenames = paste0("inst/plots/", filetypes, "/", deparse(substitute(p)),
+  filenames = paste0("../inst/plots/", filetypes, "/", deparse(substitute(p)),
   ".", filetypes), ...)
 }
 \arguments{
