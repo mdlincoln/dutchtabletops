@@ -4,8 +4,8 @@
 \alias{run_rf}
 \title{Run a randomForest model with helpful defaults for this particular dataset}
 \usage{
-run_rf(data, response, predictors, rownames = "painting_code", ntree = 2000,
-  proximity = TRUE, localImp = TRUE, ...)
+run_rf(data, response, predictors, rownames = "painting_code", portion,
+  ntree = 2000, proximity = TRUE, localImp = TRUE, ...)
 }
 \arguments{
 \item{data}{Dataframe to model.}

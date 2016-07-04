@@ -74,14 +74,13 @@ model_predictors <- list(
 
 model_response <- list(
   simple = "artist",
-  qualified = "artist_union",
+  # qualified = "artist_union",
   comp_disp = "compositional_disposition",
   year = "year_early"
 )
 
 model_subsets <- list(
-  definite_only = which(dt_valid$artist_relationship == "Definite" & dt_valid$artist_union %in% cleared_artist_union & dt_valid$artist %in% cleared_artists),
-  all_qualifications = which(dt_valid$artist_union %in% cleared_artist_union & dt_valid$artist %in% cleared_artists)
+  definite_only = which(dt_valid$artist_relationship == "Definite" & dt_valid$artist_union %in% cleared_artist_union & dt_valid$artist %in% cleared_artists)
 )
 
 # Produce all combinations (the dot product) of these three model parameters
@@ -89,7 +88,7 @@ model_params <- list(predictors = model_predictors, response = model_response, s
   cross_named_lists()
 
 # Actually run the models
-rfl <- map(model_params, function(x) run_rf(dt_valid, response = x$response, predictors = x$predictors, ntree = 500, subset = x$subsets))
+rfl <- map(model_params, function(x) run_rf(dt_valid, response = x$response, predictors = x$predictors, ntree = 5000, portion = x$subsets))
 
 # Add the resulting random forest type ("classification" or "regression") to the
 # model name
@@ -114,21 +113,24 @@ rfl_df <- rfl %>%
 
 ```{r plot_errors}
 per_artist_error <- rfl_df %>% 
-  filter(response == "qualified" & subset == "all_qualifications" & predictors %in% c("motif_only", "composition_only")) %>% 
+  filter(response == "simple" & subset == "definite_only" & predictors %in% c("motif_only", "composition_only")) %>% 
   select(-response, -forest_type) %>% 
   ungroup() %>% 
   spread(predictors, class.error) %>% 
-  separate(actual, into = c("artist", "qualification"), sep = " - ") %>% 
-  filter(qualification %in% c("After", "Definite", "Possible"))
+  rename(artist = actual)
+
+high <- 0.9
+low <- 0.1
 
 pae <- ggplot(per_artist_error, aes(x = composition_only, y = motif_only, color = artist)) +
-  annotate("segment", x = 0.5, xend = 0.5, y = -Inf, yend = Inf) +
-  annotate("segment", x = -Inf, xend = Inf, y = 0.5, yend = 0.5) +
-  annotate("text", label = "Unpredictable Composition\nUnpredictable Motifs", x = 0.75, y = 0.75) +
-  annotate("text", label = "Predictable Composition\nUnpredictable Motifs", x = 0.25, y = 0.75) +
-  annotate("text", label = "Predictable Composition\nPredictable Motifs", x = 0.25, y = 0.25) +
-  annotate("text", label = "Unpredictable Composition\nPredictable Motifs", x = 0.75, y = 0.25) +
-  geom_point(aes(shape = qualification), size = 5) +
+  annotate("rect", xmin = 0.5, xmax = Inf, ymin = 0.5, ymax = Inf, alpha = 0.2) +
+  annotate("rect", xmin = -Inf, xmax = 0.5, ymin = -Inf, ymax = 0.5, alpha = 0.2) +
+  annotate("text", label = "Unpredictable Composition\nUnpredictable Motifs", x = high, y = high) +
+  annotate("text", label = "Predictable Composition\nUnpredictable Motifs", x = low, y = high) +
+  annotate("text", label = "Predictable Composition\nPredictable Motifs", x = low, y = low) +
+  annotate("text", label = "Unpredictable Composition\nPredictable Motifs", x = high, y = low) +
+  geom_point(size = 5) +
+  geom_smooth() +
   theme_bw() +
   geom_label_repel(aes(label = artist)) +
   scale_colour_brewer(palette = "Dark2", guide = FALSE) +
@@ -162,21 +164,24 @@ Claesz and Heda were contemporaries, thus we are not
 
 ## Comparing known to unknown quantities
 
+Which artists does this model understand when only learning those definite paintings?
+
 ```{r test_known_only, eval = FALSE}
-# This is a bad way to test, because it tests the same ones it saw
 known_only_motif <- rfl$motif_only.simple.definite_only.classification
 known_only_comp <- rfl$composition_only.simple.definite_only.classification
 
 run_prediction_error <- function(model) {
-  pv <- dt_compiled %>% 
-    filter(artist %in% cleared_artists) %>% 
-    prep_vars("painting_code") %>% 
-    predict(model, newdata = ., type = "class")
+  pv <- dt_valid %>% 
+    filter(artist %in% cleared_artists, artist_relationship != "Definite") %>%
+    select(one_of(c("artist", "painting_code", motif_vars())))
+    prep_vars() %>% 
+    na.roughfix() %>% 
+    predict(model, newdata = .)
   
   pvd <- data_frame(predicted = as.character(pv)) %>% 
     mutate(painting_code = names(pv))
   
-  dt_compiled %>% 
+  dt_valid %>% 
     select(painting_code, artist, artist_relationship) %>% 
     inner_join(pvd, by = "painting_code") %>% 
     mutate(incorrect = artist != predicted) %>% 
@@ -210,7 +215,7 @@ ggplot(known_error, aes(x = composition, y = motif, color = artist, shape = arti
 ```
 
 ```{r known_only_test}
-fctr_dt_compiled <- prep_vars(dt_compiled)
+fctr_dt_compiled <- prep_vars(dt_valid)
 
 known_artist_subset <- fctr_dt_compiled %>% 
   filter(artist_relationship == "Definite" & artist %in% cleared_artists)
@@ -233,7 +238,7 @@ kunk_rf <- function(train, test, predictors) {
   train_df$artist <- NULL
   test_df$artist <- NULL
   
-  randomForest(x = train_df, y = train_response, xtest = test_df, ytest = test_response, ntree = 2000, importance = TRUE, localImp = TRUE, proximity = TRUE)
+  randomForest(x = train_df, y = train_response, xtest = test_df, ytest = test_response, ntree = 5000, importance = TRUE, localImp = TRUE, proximity = TRUE)
 }
 
 motif_trf <- kunk_rf(train = known_artist_subset, test = test_predictors, predictors = motif_vars())

@@ -68,7 +68,7 @@ cross_named_lists <- function(l, ...) {
 #'   \code{\link[randomForest]{randomForest}}.
 #'
 #' @export
-run_rf <- function(data, response, predictors, rownames = "painting_code", ntree = 2000, proximity = TRUE, localImp = TRUE, ...) {
+run_rf <- function(data, response, predictors, rownames = "painting_code", portion, ntree = 2000, proximity = TRUE, localImp = TRUE, ...) {
 
   # Produce a dataframe with required columns, rownames, and converting
   # characters to factor (necessary for randomForest to recognize them as
@@ -77,13 +77,18 @@ run_rf <- function(data, response, predictors, rownames = "painting_code", ntree
     select(one_of(c(response, rownames, setdiff(predictors, response)))) %>%
     prep_vars() %>%
     tibble::column_to_rownames(var = rownames) %>%
-    na.roughfix()
+    na.roughfix() %>%
+    filter(row_number() %in% portion)
   # Re-factor the response variable so that it has no empty levels (otherwise
   # randomForest will throw a tantrum.)
   y <- as.factor(as.character(df[[response]]))
   df[[response]] <- NULL
 
-  randomForest::randomForest(x = df, y = y, ntree = ntree, proximity = proximity, localImp = localImp, ...)
+  rf <- randomForest::randomForest(x = df, y = y, ntree = ntree, proximity = proximity, localImp = localImp, ...)
+  attr(rf, "response") <- response
+  attr(rf, "predictors") <- predictors
+  attr(rf, "rownames") <- rownames
+  return(rf)
 }
 
 #' Prepare data frames for model building and prediction
