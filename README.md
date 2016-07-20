@@ -15,4 +15,4 @@ devtools::install_github("mdlincoln/dutchtabletops_data")
 ```
 
 ---
-[Matthew Lincoln](http://matthewlincoln.net)
+[Matthew Lincoln](http://matthewlincoln.net) and [Quint Gregory](http://arthistory.umd.edu/staff/Quint%20Gregory)
