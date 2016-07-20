@@ -1,11 +1,9 @@
-dutchtabletops_data
+dutchtabletops
 ==================
 
 Database of 629 tabletop still life paintings by seventeenth-century painters from Haarlem, coded by stylistic and iconographic properties.
 
 The original database was compiled in Henry Duval Gregory, ["Tabletop Still Lifes in Haarlem, C. 1610-1660: A Study of the Relationships Between Form and Meaning" (PhD diss., University of Maryland, 2003)](http://search.proquest.com/docview/305326380) and has been edited and published here with the original author's permission.
-
-This data package is required to build the analysis done in [dutchtabletops_rf](https://github.com/mdlincoln/dutchtabletops_rf).
 
 ## Installation
 
