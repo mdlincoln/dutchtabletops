@@ -94,11 +94,15 @@ run_rf <- function(data, response, predictors, rownames = "painting_code", porti
   tx[[response]] <- NULL
 
 
-  rf <- randomForest::randomForest(x = x, y = y, xtest = tx, ytest = ty, ntree = ntree, proximity = proximity, localImp = localImp, keep.forest = TRUE, ...)
+  rf <- randomForest::randomForest(x = x, y = y, xtest = tx, ytest = ty, ntree = ntree, proximity = proximity, localImp = localImp, keep.forest = TRUE, keep.inbag = TRUE, ...)
   attr(rf, "response") <- response
   attr(rf, "predictors") <- predictors
   attr(rf, "rownames") <- rownames
-  return(rf)
+  attr(rf, "x") <- x
+  attr(rf, "y") <- y
+  attr(rf, "tx") <- tx
+  attr(rf, "ty") <- ty
+  return(structure(rf, class = c("bundledRandomForest", "randomForest")))
 }
 
 #' Prepare data frames for model building and prediction
@@ -112,6 +116,50 @@ run_rf <- function(data, response, predictors, rownames = "painting_code", porti
 prep_vars <- function(x) {
   x %>%
     purrr::dmap_if(function(x) is.character(x) | is.logical(x), as.factor)
+}
+
+# Model access ----
+
+#' @export
+rf_response <- function(rf) {
+  stopifnot(inherits(rf, "bundledRandomForest"))
+  return(attr(rf, "response"))
+}
+
+#' @export
+rf_predictors <- function(rf) {
+  stopifnot(inherits(rf, "bundledRandomForest"))
+  return(attr(rf, "predictors"))
+}
+
+#' @export
+rf_rownames <- function(rf) {
+  stopifnot(inherits(rf, "bundledRandomForest"))
+  return(attr(rf, "rownames"))
+}
+
+#' @export
+rf_x <- function(rf) {
+  stopifnot(inherits(rf, "bundledRandomForest"))
+  return(attr(rf, "x"))
+}
+
+#' @export
+rf_y <- function(rf) {
+  stopifnot(inherits(rf, "bundledRandomForest"))
+  return(attr(rf, "y"))
+}
+
+#' @export
+rf_tx <- function(rf) {
+  stopifnot(inherits(rf, "bundledRandomForest"))
+  return(attr(rf, "tx"))
+}
+
+#' @export
+rf_ty <- function(rf) {
+  stopifnot(inherits(rf, "bundledRandomForest"))
+  return(attr(rf, "ty"))
 }
 
 # Internal functions ----
