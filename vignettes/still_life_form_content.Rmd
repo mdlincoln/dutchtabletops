@@ -18,7 +18,7 @@ library(tibble)
 library(ggplot2)
 library(ggrepel)
 library(randomForest)
-knitr::opts_chunk$set(fig.width = 9, fig.height = 9)
+knitr::opts_chunk$set(fig.width = 9, fig.height = 9, warning = FALSE, echo = FALSE, cache = TRUE)
 ```
 
 ## What are random forests? Why use them?
@@ -58,7 +58,7 @@ Because we may be interested in any number of combinations of these three parame
 
 ```{r model_specs, message=FALSE}
 # Model artists with only n or more paintings
-n_ptg <- 10
+n_ptg <- 5
 cleared_artists <- unique(filter(group_by(dt_compiled, artist), n() >= n_ptg)$artist)
 cleared_artist_union <- unique(filter(group_by(dt_compiled, artist_union), n() >= n_ptg)$artist_union)
 
@@ -97,7 +97,7 @@ model_params <- list(
   cross_named_lists()
 
 # Actually run the models
-rfl <- map(model_params, function(x) run_rf(dt_valid, response = x$response, predictors = x$predictors, ntree = 500, portion = x$subsets, test = x$tests))
+rfl <- map(model_params, function(x) run_rf(dt_valid, response = x$response, predictors = x$predictors, ntree = 5000, portion = x$subsets, test = x$tests))
 
 # Add the resulting random forest type ("classification" or "regression") to the
 # model name
@@ -131,38 +131,23 @@ per_artist_error <- rfl_df %>%
     artist_relationship = factor("Definite", levels = c("Definite", "Possible", "After")),
     artist = factor(artist, levels = sort(unique(artist))))
 
-pae <- ggplot(per_artist_error, aes(x = composition_only, y = motif_only, color = artist)) +
+pae <- ggplot(per_artist_error, aes(x = composition_only, y = motif_only, color = artist, shape = artist_relationship)) +
   theme_error(xname = "Composition", yname = "Motif") +
   geom_point(size = 5) +
   geom_label_repel(aes(label = artist))
 
-multiplot(pae, height = 7, width = 10)
+multiplot(pae, height = 7.5, width = 10)
 ```
 
 Several points of note:
 
-1. Those paintings whose attribution is qualified as "Possible" are the most confusing to the model; both Willem Claesz Heda and Pieter Claes "possible" paintings have at or near 100% error based on either motif or compositional predictors.
-1. Gerrit Heda is a mercurial painter: of the "Definite" attributions, the model is mistaken more that 75% of the time when trying to attribute them on either motif or compositional predictors. Cornelis Mahu is also unpredictable by both counts.
-1. Floris van Dijck and Floris van Schooten, on the other hand, are relatively more precitable, with Van Dijck's compositions distinct enough that the model can predict his paintings with 90% accuracy when looking only at compositions, and Van Schooten's works with about 80% accuracy when just looking at motifs.
+1. Gerrit Heda is a mercurial painter: of the "Definite" attributions, the model is mistaken more that 75% of the time when trying to attribute them on either motif or compositional predictors.
+1. The other painters are relatively more predictable, though Cornelis Mahu's compositional variety means the model mistakes his works for others almost half the time. 
+  1. Pieter Claesz apparently has an exceptionally stable set of motifs - 9 out of 10 times the model can accurate predict his works based on motif information alone.
+  2. Floris van Dijck has compositions that are almost just as predictable.
 
 Things get complex when looking at the difference between unqualified Willem Claesz Heda and Pieter Claesz attributions, and those attributions that are "after" the style of WCH or PC.
-Known paintings by Pieter Claesz are predictable by their motifs - the most predictable of any class of paintings in the database, and relatively predictable by their composiitons.
-On the other hand, those paintings done in the style of Pieter Claesz by a student or imitator have a much wider range of composiitonal arrangmenets that render them unpredictable by composition alone.
-"After Pieter Claesz" paintings are somewhat predictable by motif, but much less so than their definitively-attributed counterparts.
-What is more, their compositions are far more heterodox, suggesting that imitators of Claesz paid little heed to his particular modes of arranging objects, and only some attention to the types of objects he commonly included in his scenes.
-The market for Pieter Claesz-like paintings apparently had little interest in the unique objects or compositions that Claesz himself 
 
-Not so for Willem Claesz Heda derivatives.
-Paintings after Heda are actally slightly _more_ predictable than the definitely-identified ones, at least when judging by their motifs.
-Whereas derivatives of Claesz had a very wide visual range, those of Heda were much more specific.
-The idea of a "Heda" painting was apparently more constricted than was the conception of a "Claesz".
-
-This difference points to the complexity of this seemingly-bounded genre of painting production.
-Claesz and Heda were contemporaries, thus we are not 
-
-## Comparing known to unknown quantities
-
-Which artists does this model understand when only learning those definite paintings?
 
 ```{r display_test}
 known_only_motif <- rfl$motif_only.simple.definite_only.qualified_only.classification
@@ -193,7 +178,8 @@ test_errors <- bind_rows(
   composition_only = test_votes(known_only_comp),
   .id = "type") %>% 
   spread(type, error) %>% 
-  ungroup()
+  ungroup() %>% 
+  filter(artist_relationship != "Co-painter")
 
 all_error <- bind_rows(
   old = per_artist_error, 
@@ -207,13 +193,16 @@ all_quals_error <- ggplot(all_error, aes(x = composition_only, y = motif_only, c
   geom_point(size = 5) +
   scale_alpha_discrete(c(1, 0.1), guide = FALSE) +
   geom_label_repel(aes(label = artist))
-all_quals_error
+
+multiplot(all_quals_error, height = 7, width = 10)
 ```
 
 
 ## Local variable importance
 
-```{r pca}
+It is also possible
+
+```{r pca, fig.width=4, fig.height=4}
 single_rf <- rfl$motif_only.simple.definite_only.qualified_only.classification
 
 rfl_pca <- map(set_names(levels(single_rf$predicted)), function(x) {
@@ -246,7 +235,67 @@ artist_motif_plot <- function(l, o, m = 12, hue = "red") {
 rfl_plots <- map2(rfl_loadings, rfl_observations, artist_motif_plot) %>% 
   map2(., names(rfl_observations), function(x, y) x + ggtitle(y))
 
-walk(rfl_plots, plot)
+walk2(rfl_plots, seq_len(length(rfl_plots)), function(rfl_plot, y) multiplot(p = rfl_plot, postfix = y, height = 7, width = 10))
 ```
 
+## Painting dates
+
+```{r rf_date}
+library(randomForestCI)
+
+motif_date <- rfl$motif_only.year.definite_only.qualified_only.regression
+comp_date <- rfl$composition_only.year.definite_only.qualified_only.regression
+motif_date_ci <- randomForestInfJack(comp_date, rf_x(comp_date)) %>% 
+  rownames_to_column(var = "painting_code")
+
+rf_resid <- function(rf) {
+  stopifnot(rf$type == "regression")
+  
+  rn <- rf_rownames(rf)
+  
+  ci <- randomForestInfJack(rf, newdata = rf_x(rf)) %>% 
+    rownames_to_column(var = rn)
+  
+  data.frame(predicted = rf$predicted) %>% 
+    rownames_to_column(var = rn) %>% 
+    inner_join(select(dt_valid, one_of(c(rn, rf_response(rf), "artist"))), by = rn) %>% 
+    inner_join(ci, by = rn) %>% 
+    mutate(
+      resid = log(year_early) - predicted,
+      resid_hat = log(year_early) - y.hat)
+}
+
+
+
+resid <- data.frame(predicted = comp_date$predicted) %>% 
+  rownames_to_column(var = "painting_code") %>% 
+  inner_join(select(dt_compiled, painting_code, year_early, artist), by = "painting_code") %>% 
+  inner_join(motif_date_ci, by = "painting_code") %>% 
+  mutate(
+    resid = year_early - predicted,
+    resid_hat = year_early - y.hat)
+
+ggplot(resid, aes(x = year_early, color = artist)) +
+  geom_hline(yintercept = 0) +
+  geom_point(aes(y = resid_hat)) +
+  scale_color_brewer(type = "qual") +
+  geom_errorbar(aes(ymin = resid - var.hat, ymax = resid + var.hat), alpha = 0.3)
+```
+
+
+```{r}
+
+log_date <- run_rf(data = mutate(dt_valid, year_early = sqrt(year_early)), response = "year_early", predictors = motif_vars(), rownames = "painting_code", portion = which(dt_valid$artist_relationship == "Definite"), tests = which(dt_valid$artist_relationship != "Definite"))
+
+log_resid <- rf_resid(log_date)
+
+ggplot(log_resid, aes(x = year_early, y = resid_hat)) + 
+  geom_point()
+
+log_resid %>% 
+  arrange(resid) %>% 
+  mutate(ith = cumsum(resid), ln = row_number()) %>% 
+  ggplot(aes(x = ln, y = ith)) +
+  geom_point()
+```
 
