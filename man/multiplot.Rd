@@ -4,9 +4,9 @@
 \alias{multiplot}
 \title{Render ggplot while also writing multiple versions to disk}
 \usage{
-multiplot(p, filetypes = c("pdf", "svg", "png"),
-  filenames = paste0("../inst/plots/", filetypes, "/", deparse(substitute(p)),
-  ".", filetypes), ...)
+multiplot(p, filetypes = c("pdf", "svg", "png"), postfix = NULL,
+  filenames = paste0("inst/plots/", filetypes, "/", deparse(substitute(p)),
+  ifelse(is.null(postfix), "", paste0("_", postfix)), ".", filetypes), ...)
 }
 \arguments{
 \item{p}{Plot object}

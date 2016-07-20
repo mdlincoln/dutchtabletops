@@ -6,7 +6,7 @@
 #' @param ... Options to pass to \code{\link[ggplot2]{ggsave}}
 #'
 #' @export
-multiplot <- function(p, filetypes = c("pdf", "svg", "png"), filenames = paste0("../inst/plots/", filetypes, "/", deparse(substitute(p)), ".", filetypes), ...) {
+multiplot <- function(p, filetypes = c("pdf", "svg", "png"), postfix = NULL, filenames = paste0("inst/plots/", filetypes, "/", deparse(substitute(p)), ifelse(is.null(postfix), "", paste0("_", postfix)), ".", filetypes), ...) {
   purrr::walk(filenames, function(x) ggplot2::ggsave(filename = x, plot = p, ...))
   plot(p)
 }
