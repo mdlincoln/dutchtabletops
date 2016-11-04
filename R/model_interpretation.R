@@ -78,6 +78,31 @@ pca_obs_df <- function(rf_pca, rownames = "rownames") {
     tibble::rownames_to_column(var = rownames)
 }
 
+#' The top n most important terms for a class
+#'
+#' @param rf RandomForest object
+#' @param class Name of the category
+#' @param n Integer. Number of topmost terms to return
+#'
+#' @return A data frame with term names and importance values
+#'
+#' @export
+top_n_importance <- function(rf, class, n) {
+  as.data.frame(rf[["importance"]]) %>%
+    tibble::rownames_to_column(var = "term") %>%
+    gather(category, importance, -term) %>%
+    filter(category == class) %>%
+    select(-category) %>%
+    arrange(desc(importance)) %>%
+    slice(seq_len(n))
+}
+
+#' @describeIn top_n_importance Return the names as a vector only
+#' @export
+top_n_importance_names <- function(rf, class, n) {
+  top_n_importance(rf, class, n)[["term"]]
+}
+
 # Internal functions ----
 
 confusion <- function(f) {
