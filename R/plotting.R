@@ -1,16 +1,3 @@
-#' Render ggplot while also writing multiple versions to disk
-#'
-#' @param p Plot object
-#' @param filetypes Types of files to save
-#' @param filename Filenames
-#' @param ... Options to pass to \code{\link[ggplot2]{ggsave}}
-#'
-#' @export
-multiplot <- function(p, filetypes = c("pdf", "svg", "png"), postfix = NULL, filenames = paste0("inst/plots/", filetypes, "/", deparse(substitute(p)), ifelse(is.null(postfix), "", paste0("_", postfix)), ".", filetypes), ...) {
-  purrr::walk(filenames, function(x) ggplot2::ggsave(filename = x, plot = p, ...))
-  plot(p)
-}
-
 #' Error plot ggplot defaults
 #'
 #' Adds a number of layers to a ggplot base to create a suitable dual-error comparison plot.
