@@ -135,8 +135,7 @@ pae <- ggplot(per_artist_error, aes(x = composition_only, y = motif_only, color 
   theme_error(xname = "Composition", yname = "Motif") +
   geom_point(size = 5) +
   geom_label_repel(aes(label = artist))
-
-multiplot(pae, height = 7.5, width = 10)
+pae
 ```
 
 Several points of note:
@@ -193,8 +192,7 @@ all_quals_error <- ggplot(all_error, aes(x = composition_only, y = motif_only, c
   geom_point(size = 5) +
   scale_alpha_discrete(c(1, 0.1), guide = FALSE) +
   geom_label_repel(aes(label = artist))
-
-multiplot(all_quals_error, height = 7, width = 10)
+all_quals_error
 ```
 
 
@@ -235,7 +233,7 @@ artist_motif_plot <- function(l, o, m = 12, hue = "red") {
 rfl_plots <- map2(rfl_loadings, rfl_observations, artist_motif_plot) %>% 
   map2(., names(rfl_observations), function(x, y) x + ggtitle(y))
 
-walk2(rfl_plots, seq_len(length(rfl_plots)), function(rfl_plot, y) multiplot(p = rfl_plot, postfix = y, height = 7, width = 10))
+#walk2(rfl_plots, seq_len(length(rfl_plots)), function(rfl_plot, y) multiplot(p = rfl_plot, postfix = y, height = 7, width = 10))
 ```
 
 ## Painting dates
