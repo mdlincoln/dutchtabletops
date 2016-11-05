@@ -198,6 +198,21 @@ all_quals_error
 
 ## Local variable importance
 
+```{r local_imp_byartist}
+rfv <- rf_votes(known_only_motif) %>% 
+  gather(predicted, votes, -painting_code) %>% 
+  inner_join(dt_compiled, by = "painting_code") %>% 
+  filter(predicted == "Pieter Claesz") %>% 
+  select(votes, artist, one_of(c("LV", "N", "T1", "T", "Ch", "LV2", "Fi"))) %>% 
+  gather(term, value, -votes, -artist) %>% 
+  filter(value == TRUE)
+
+ggplot(rfv, aes(x = term, y = votes, color = artist == "Pieter Claesz")) +
+  facet_wrap(~ term, scales = "free_x") +
+  geom_jitter()
+```
+
+
 It is also possible
 
 ```{r pca, fig.width=4, fig.height=4}
