@@ -8,3 +8,4 @@ vignettes/*_files
 vignettes/*.R
 .httr-oauth
 inst/plots/
+*.pdf
