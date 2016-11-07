@@ -134,7 +134,8 @@ per_artist_error <- rfl_df %>%
 pae <- ggplot(per_artist_error, aes(x = composition_only, y = motif_only, color = artist, shape = artist_relationship)) +
   theme_error(xname = "Composition", yname = "Motif") +
   geom_point(size = 5) +
-  geom_label_repel(aes(label = artist))
+  geom_label_repel(aes(label = artist)) +
+  scale_shape_discrete(guide = FALSE)
 pae
 ```
 
@@ -190,7 +191,7 @@ all_error <- bind_rows(
 all_quals_error <- ggplot(all_error, aes(x = composition_only, y = motif_only, color = artist, shape = artist_relationship, alpha = artist_relationship != "Definite")) +
   theme_error("Composition", "Motif") +
   geom_point(size = 5) +
-  scale_alpha_discrete(c(1, 0.1), guide = FALSE) +
+  scale_alpha_discrete(c(1, 0.1), guide = FALSE)
   geom_label_repel(aes(label = artist))
 all_quals_error
 ```
@@ -214,11 +215,39 @@ On the other hand, when its presence results in almost no trees voting for the g
 [^impmetric]: The random forest model as implemented by @liaw2002 calculates variable inportance for a given class by averaging the mean decrease in accuracy for a given class (in this case, for a given artist) across all trees that occurs when the given variable is permuted - its values put in to random order, rendering it meaningless. The theory goes: the more important that variable is in the behavior of the model, the more negative the impact when that variable is effectively removed from the data.
 
 ```{r local_imp_byartist}
-pc_votes <- rf_effects(known_only_comp, class = "Pieter Claesz")
+pc_terms <- top_n_importance_names(known_only_motif, class = "Pieter Claesz")
 
-ggplot(pc_votes, aes(x = term, y = votes, color = is_true_positive)) +
-  facet_wrap(term ~ metric_value, scales = "free_x") +
-  geom_jitter()
+pc_motif_votes <- rf_effects(known_only_motif, class = "Pieter Claesz", terms = pc_terms) %>% 
+  left_join(dt_motif_labels, by = c("term" = "motif_code")) %>% 
+  mutate(metric_value = ifelse(metric_value, "present", "absent"))
+
+ggplot(pc_motif_votes, aes(x = metric_value, y = votes, color = is_true_positive, shape = metric_value)) +
+  facet_wrap(~ wrapped_motif_label, scales = "free_x") +
+  geom_jitter() +
+  scale_color_brewer(palette = "Set1") +
+  scale_shape_discrete(guide = FALSE) +
+  theme_bw() +
+  theme(legend.position = "top") +
+  labs(title = "Pieter Claesz - Important Motifs", x = NULL, y = "Model consensus", color = "Work actually by FvS?")
+
+ggsave(filename = "pc_motif.pdf", height = 7, width = 9)
+
+fvs_terms <- top_n_importance_names(known_only_motif, class = "Floris van Schooten")
+
+fvs_motif_votes <- rf_effects(known_only_motif, class = "Floris van Schooten", terms = fvs_terms) %>% 
+  left_join(dt_motif_labels, by = c("term" = "motif_code")) %>% 
+  mutate(metric_value = ifelse(metric_value, "present", "absent"))
+
+ggplot(fvs_motif_votes, aes(x = metric_value, y = votes, color = is_true_positive, shape = metric_value)) +
+  facet_wrap(~ wrapped_motif_label, scales = "free_x") +
+  geom_jitter() +
+  scale_color_brewer(palette = "Set1") +
+  scale_shape_discrete(guide = FALSE) +
+  theme_bw() +
+  theme(legend.position = "top") +
+  labs(title = "Floris van Schooten - Important Motifs", x = NULL, y = "Model consensus", color = "Work actually by FvS?")
+
+ggsave(filename = "fvs_motif.pdf", height = 7, width = 9)
 ```
 
 
