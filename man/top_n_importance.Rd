@@ -7,7 +7,7 @@
 \usage{
 top_n_importance(rf, class, n)
 
-top_n_importance_names(rf, class, n)
+top_n_importance_names(rf, class, n = 9)
 }
 \arguments{
 \item{rf}{RandomForest object}
