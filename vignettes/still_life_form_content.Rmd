@@ -248,6 +248,65 @@ ggplot(fvs_motif_votes, aes(x = metric_value, y = votes, color = is_true_positiv
   labs(title = "Floris van Schooten - Important Motifs", x = NULL, y = "Model consensus", color = "Work actually by FvS?")
 
 ggsave(filename = "fvs_motif.pdf", height = 7, width = 9)
+
+wch_motif_votes <- rf_effects(known_only_motif, class = "Willem Claesz Heda") %>% 
+  left_join(dt_motif_labels, by = c("term" = "motif_code")) %>% 
+  mutate(metric_value = ifelse(metric_value, "present", "absent"))
+
+ggplot(wch_motif_votes, aes(x = metric_value, y = votes, color = is_true_positive, shape = metric_value)) +
+  facet_wrap(~ wrapped_motif_label, scales = "free_x") +
+  geom_jitter() +
+  scale_color_brewer(palette = "Set1") +
+  scale_shape_discrete(guide = FALSE) +
+  theme_bw() +
+  theme(legend.position = "top") +
+  labs(title = "Willem Claesz Heda - Important Motifs", x = NULL, y = "Model consensus", color = "Work actually by FvS?")
 ```
 
+```{r confusing_paintings}
 
+ng3m <- rf_contested_obs(known_only_motif) %>% 
+  filter(painting_code == "NG 3") %>% 
+  select(-contest_rank, -vote_div) %>% 
+  gather(artist, votes, -painting_code) 
+  
+ggplot(ng3m, aes(x = fct_reorder(artist, votes), y = votes, fill = artist == "Nicolaes Gillis")) + 
+  geom_bar(stat = "identity") + 
+  coord_flip() + theme_bw() + 
+  theme(legend.position = "none") + 
+  labs(x = "Predicted artist") +
+  ylim(0, 1)
+
+ggsave(filename = "ng3m.pdf", width = 5, height = 4)
+
+
+wch44m <- rf_contested_obs(known_only_motif) %>% 
+  filter(painting_code == "WCH44") %>% 
+  select(-contest_rank, -vote_div) %>% 
+  gather(artist, votes, -painting_code) 
+  
+ggplot(wch44m, aes(x = fct_reorder(artist, votes), y = votes, fill = artist == "Willem Claesz Heda")) + 
+  geom_bar(stat = "identity") + 
+  coord_flip() + theme_bw() + 
+  theme(legend.position = "none") + 
+  labs(x = "Predicted artist") +
+  ylim(0, 1)
+
+ggsave(filename = "wch44m.pdf", width = 5, height = 4)
+
+
+wch44c <- rf_contested_obs(known_only_comp) %>% 
+  filter(painting_code == "WCH44") %>% 
+  select(-contest_rank, -vote_div) %>% 
+  gather(artist, votes, -painting_code) 
+  
+ggplot(wch44c, aes(x = fct_reorder(artist, votes), y = votes, fill = artist == "Willem Claesz Heda")) + 
+  geom_bar(stat = "identity") + 
+  coord_flip() + theme_bw() + 
+  theme(legend.position = "none") + 
+  labs(x = "Predicted artist") +
+  ylim(0, 1)
+
+ggsave(filename = "wch44c.pdf", width = 5, height = 4)
+
+```

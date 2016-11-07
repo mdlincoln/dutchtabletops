@@ -139,6 +139,26 @@ rf_effects <- function(rf, class, terms = top_n_importance_names(rf = rf, class 
   srf
 }
 
+#' Identify the most contested observations in random forest model
+#'
+#' In which observations do the trees in a mdoel most disagree about how to classfy?
+#'
+#' @param rf randomForest object
+#'
+#' @return A dataframe with observation ID and vote diversity, ranked in descending order of diversity (e.g. with most contested observations at top)
+#'
+#' @export
+rf_contested_obs <- function(rf) {
+  rf_votes(rf) %>%
+    gather_(key_col = "class", value_col = "votes", gather_cols = setdiff(names(.), rf_rownames(rf))) %>%
+    group_by_(rf_rownames(rf)) %>%
+    mutate(vote_div = vegan::diversity(votes, index = "shannon")) %>%
+    ungroup() %>%
+    spread_(key_col = "class", value_col = "votes") %>%
+    arrange(desc(vote_div)) %>%
+    mutate(contest_rank = row_number())
+}
+
 # Internal functions ----
 
 confusion <- function(f) {
