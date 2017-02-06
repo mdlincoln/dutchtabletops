@@ -1,0 +1,104 @@
+---
+title: "Form and Content in 17th-Century Haarlem Still Lifes"
+author: "Matthew Lincoln"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Form and Content in 17th-Century Haarlem Still Lifes}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r libraries, include = FALSE}
+library(dutchtabletopsdata)
+library(purrr)
+library(dplyr)
+library(tidyr)
+library(tibble)
+library(ggplot2)
+library(ggrepel)
+library(forcats)
+library(randomForest)
+library(broom)
+knitr::opts_chunk$set(fig.width = 9, fig.height = 9, warning = FALSE, echo = FALSE, cache = TRUE, dev = "pdf")
+```
+
+```{r create_model}
+# Model artists with only n or more paintings
+n_ptg <- 5
+cleared_artists <- unique(filter(group_by(dt_compiled, artist), n() >= n_ptg)$artist)
+cleared_artist_union <- unique(filter(group_by(dt_compiled, artist_union), n() >= n_ptg)$artist_union)
+
+dt_valid <- dt_compiled %>% 
+  filter(artist %in% cleared_artists, artist_union %in% cleared_artist_union) %>% 
+  select(one_of(comp_vars(), motif_vars(), "year_early", "year_late", "artist", "artist_union")) %>%
+  mutate(year = (year_early + year_late) / 2) %>% 
+  dmap_if(function(x) is.character(x) | is.logical(x), as.factor)
+
+partition <- function(df, response_var, ratio = 0.2) {
+  n_obs <- nrow(df)
+  all_resp <- df[[response_var]]
+  all_data <- df %>% 
+    select(one_of(comp_vars(), motif_vars())) %>% 
+    na.roughfix()
+  test_index <- sample(seq_len(n_obs), size = ratio * n_obs, replace = FALSE)
+  test_data <- all_data[test_index,]
+  test_resp <- all_resp[test_index]
+  train_data <- all_data[-test_index,]
+  train_resp <- all_resp[-test_index]
+  
+  l <- list(
+    allx = all_data,
+    ally = all_resp,
+    x = train_data,
+    y = train_resp,
+    xtest = test_data,
+    ytest = test_resp)
+  
+  if (is.numeric(train_resp)) {
+    quant_breaks <- quantile(train_resp, probs = seq(0, 1, length.out = 5))
+    quant_labels <- quant_breaks[1:4]
+    
+    l$yquant = cut(train_resp, breaks = quant_breaks, labels = quant_labels)
+    l$minsamp = round(n_obs/5) - 1
+  } else {
+    l$yquant = train_resp
+    l$minsamp = last(fct_count(train_resp, sort = TRUE)[["n"]])
+  }
+  
+  l
+}
+
+artist_data <- partition(dt_valid, "artist")
+year_data <- partition(dt_valid, "year")
+
+artist_forest <- randomForest(x = artist_data$allx, y = artist_data$ally, ntree = 5000, importance = TRUE, proximity = TRUE, do.trace = 100, keep.forest = TRUE)
+artist_forest_strata <- randomForest(x = artist_data$allx, y = artist_data$ally, ntree = 5000, importance = TRUE, proximity = TRUE, do.trace = 100, keep.forest = TRUE, strata = artist_data$y, replace = TRUE, sampsize = 100)
+year_forest <- randomForest(x = year_data$allx, y = year_data$ally, ntree = 5000, importance = TRUE, proximity = TRUE, do.trace = 100, keep.forest = TRUE)
+
+artist_forest$err.rate[5000,]
+
+write_clip(data.frame(actual = artist_data$ally, predicted = artist_forest$predicted))
+
+data_frame(real = year_data$ally, predicted = year_forest$predicted) %>% 
+  ggplot(aes(x = real, y = predicted)) +
+  geom_linerange(aes(x = real, ymin = predicted, ymax = real, color = predicted > real)) +
+  geom_point() +
+  xlim(1600, 1700) +
+  ylim(1600, 1700) +
+  geom_abline(slope = 1, intercept = 0, color = "gray") +
+  theme_bw() +
+  scale_color_discrete(guide = FALSE) +
+  geom_smooth(method = "lm")
+```
+
+```{r feature_power}
+df <- all_data
+var_name <- "LV"
+simulate_data <- function(df, var_name) {
+  
+}
+```
+
+
+
