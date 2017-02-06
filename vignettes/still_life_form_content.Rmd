@@ -139,6 +139,47 @@ pae <- ggplot(per_artist_error, aes(x = composition_only, y = motif_only, color 
 pae
 ```
 
+```{r radial_errors}
+known_only_motif <- rfl$motif_only.simple.definite_only.qualified_only.classification
+known_only_comp <- rfl$composition_only.simple.definite_only.qualified_only.classification
+
+mvotes <- known_only_motif$votes %>% 
+  as.data.frame() %>% 
+  rownames_to_column(var = "painting_code") %>%
+  mutate(predicted = known_only_motif$predicted) %>% 
+  gather(candidate, votes, -painting_code, -predicted) %>%
+  inner_join(dt_compiled, by = "painting_code") %>% 
+  group_by(painting_code) %>% 
+  filter(row_number(desc(votes)) == 1) %>% 
+  ungroup()
+
+anames <- levels(known_only_motif$y)
+acols <- RColorBrewer::brewer.pal(8, name = "Set1")
+
+artist_radial <- function(aname, acolor) {
+  set.seed(100)
+  adata <- mvotes %>% 
+    filter(artist == aname)
+  
+  bdata <- setdiff(mvotes, adata)
+  
+  ggplot(bdata, aes(x = factor(predicted, levels = anames), y = votes)) +
+    geom_jitter(alpha = 0.5, size = 2) +
+    geom_jitter(data = adata, color = acolor, size = 5, alpha = 0.7) +
+    scale_x_discrete(drop = FALSE) +
+    coord_polar() +
+    ylim(0, 1) +
+    labs(t = "Vote proportion", x = NULL, title = aname) +
+    theme_bw()
+    
+  ggsave(filename = paste0(aname, "_radial.pdf"), height = 7, width = 7)
+}
+
+rad_plots <- set_names(map2(anames, acols, artist_radial), anames)
+rad_plots$`Floris van Dijck`
+rad_plots$`Cornelis Mahu`
+```
+
 Several points of note:
 
 1. Gerrit Heda is a mercurial painter: of the "Definite" attributions, the model is mistaken more that 75% of the time when trying to attribute them on either motif or compositional predictors.
@@ -150,9 +191,6 @@ Things get complex when looking at the difference between unqualified Willem Cla
 
 
 ```{r display_test}
-known_only_motif <- rfl$motif_only.simple.definite_only.qualified_only.classification
-known_only_comp <- rfl$composition_only.simple.definite_only.qualified_only.classification
-
 test_votes <- function(model) {
   
   votes <- model$test$votes
@@ -221,14 +259,15 @@ pc_motif_votes <- rf_effects(known_only_motif, class = "Pieter Claesz", terms = 
   left_join(dt_motif_labels, by = c("term" = "motif_code")) %>% 
   mutate(metric_value = ifelse(metric_value, "present", "absent"))
 
-ggplot(pc_motif_votes, aes(x = metric_value, y = votes, color = is_true_positive, shape = metric_value)) +
+ggplot(pc_motif_votes, aes(x = metric_value, y = votes, color = is_true_positive, shape = metric_value, alpha = metric_value)) +
   facet_wrap(~ wrapped_motif_label, scales = "free_x") +
   geom_jitter() +
   scale_color_brewer(palette = "Set1") +
   scale_shape_discrete(guide = FALSE) +
+  scale_alpha_discrete(guide = FALSE) +
   theme_bw() +
   theme(legend.position = "top") +
-  labs(title = "Pieter Claesz - Important Motifs", x = NULL, y = "Model consensus", color = "Work actually by FvS?")
+  labs(title = "Pieter Claesz - Important Motifs", x = NULL, y = "Model consensus", color = "Work actually by PC?")
 
 ggsave(filename = "pc_motif.pdf", height = 7, width = 9)
 
@@ -238,11 +277,12 @@ fvs_motif_votes <- rf_effects(known_only_motif, class = "Floris van Schooten", t
   left_join(dt_motif_labels, by = c("term" = "motif_code")) %>% 
   mutate(metric_value = ifelse(metric_value, "present", "absent"))
 
-ggplot(fvs_motif_votes, aes(x = metric_value, y = votes, color = is_true_positive, shape = metric_value)) +
+ggplot(fvs_motif_votes, aes(x = metric_value, y = votes, color = is_true_positive, shape = metric_value, alpha = metric_value)) +
   facet_wrap(~ wrapped_motif_label, scales = "free_x") +
   geom_jitter() +
   scale_color_brewer(palette = "Set1") +
   scale_shape_discrete(guide = FALSE) +
+  scale_alpha_discrete(guide = FALSE) +
   theme_bw() +
   theme(legend.position = "top") +
   labs(title = "Floris van Schooten - Important Motifs", x = NULL, y = "Model consensus", color = "Work actually by FvS?")
@@ -258,6 +298,7 @@ ggplot(wch_motif_votes, aes(x = metric_value, y = votes, color = is_true_positiv
   geom_jitter() +
   scale_color_brewer(palette = "Set1") +
   scale_shape_discrete(guide = FALSE) +
+  scale_alpha_discrete(guide = FALSE) +
   theme_bw() +
   theme(legend.position = "top") +
   labs(title = "Willem Claesz Heda - Important Motifs", x = NULL, y = "Model consensus", color = "Work actually by FvS?")
