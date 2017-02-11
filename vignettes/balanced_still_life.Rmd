@@ -72,13 +72,46 @@ partition <- function(df, response_var, ratio = 0.2) {
 artist_data <- partition(dt_valid, "artist")
 year_data <- partition(dt_valid, "year")
 
-artist_forest <- randomForest(x = artist_data$allx, y = artist_data$ally, ntree = 5000, importance = TRUE, proximity = TRUE, do.trace = 100, keep.forest = TRUE)
-artist_forest_strata <- randomForest(x = artist_data$allx, y = artist_data$ally, ntree = 5000, importance = TRUE, proximity = TRUE, do.trace = 100, keep.forest = TRUE, strata = artist_data$y, replace = TRUE, sampsize = 100)
-year_forest <- randomForest(x = year_data$allx, y = year_data$ally, ntree = 5000, importance = TRUE, proximity = TRUE, do.trace = 100, keep.forest = TRUE)
+artist_motif_forest <- randomForest(x = select(artist_data$allx, one_of(motif_vars())), y = artist_data$ally, ntree = 5000, importance = TRUE, proximity = TRUE, do.trace = 100, keep.forest = TRUE)
+artist_comp_forest <- randomForest(x = select(artist_data$allx, one_of(comp_vars())), y = artist_data$ally, ntree = 5000, importance = TRUE, proximity = TRUE, do.trace = 100, keep.forest = TRUE)
+artist_all_forest <- randomForest(x = artist_data$allx, y = artist_data$ally, ntree = 5000, importance = TRUE, proximity = TRUE, do.trace = 100, keep.forest = TRUE)
+```
 
-artist_forest$err.rate[5000,]
+```{r show_error}
+error <- function(rf) {
+  rf[["err.rate"]] %>% 
+    as.data.frame() %>%
+    slice(nrow(.)) %>% 
+    gather(actual, error_rate, seq_len(ncol(.)))
+}
+  
+bind_rows(
+motif = error(artist_motif_forest),
+composition = error(artist_comp_forest),
+.id = "predictor_type") %>% 
+  filter(actual != "OOB") %>% 
+  spread(predictor_type, value = error_rate) %>% 
+  ggplot(aes(x = composition, y = motif, color = actual)) +
+  geom_point(size = 4) +
+  geom_label_repel(aes(label = actual))
 
-write_clip(data.frame(actual = artist_data$ally, predicted = artist_forest$predicted))
+```
+
+```{r confusion}
+confusion <- function(rf) {
+  rf[["confusion"]] %>% 
+    as.data.frame() %>% 
+    rownames_to_column(var = "actual") %>% 
+    gather(predicted, times, 2:ncol(.)) %>% 
+    filter(predicted != "class.error")
+}
+
+write_clip(data.frame(actual = artist_data$ally, motif_predicted = artist_motif_forest$predicted, composiiton_predicted = artist_comp_forest$predicted))
+```
+
+```{r}
+
+write_clip()
 
 data_frame(real = year_data$ally, predicted = year_forest$predicted) %>% 
   ggplot(aes(x = real, y = predicted)) +
