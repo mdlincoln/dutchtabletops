@@ -52,9 +52,19 @@ partition <- function(df, response_var, ratio = 0.2) {
   train_data <- all_data[-test_index,]
   train_resp <- all_resp[-test_index]
   
+  def_index <- df[["artist_relationship"]] == "Definite"
+  def_data <- all_data[def_index,]
+  def_res <- all_resp[def_index]
+  unk_data <- all_data[-def_index,]
+  unk_res <- all_resp[-def_index]
+  
   l <- list(
     allx = all_data,
     ally = all_resp,
+    defx = def_data,
+    defy = def_res,
+    unkx = unk_data,
+    unky = unk_res,
     x = train_data,
     y = train_resp,
     xtest = test_data,
@@ -76,41 +86,124 @@ partition <- function(df, response_var, ratio = 0.2) {
 
 artist_data <- partition(dt_valid, "artist")
 year_data <- partition(dt_valid, "year")
-artist_union_data <- partition(dt_valid, "artist_union")
+artist_union_data <- partition(dt_valid, "artist")
+```
 
-artist_motif_forest <- randomForest(x = select(artist_data$allx, one_of(motif_vars())), y = artist_data$ally, ntree = 500, importance = TRUE, proximity = TRUE, keep.forest = TRUE)
-artist_comp_forest <- randomForest(x = select(artist_data$allx, one_of(comp_vars())), y = artist_data$ally, ntree = 500, importance = TRUE, proximity = TRUE, keep.forest = TRUE)
-artist_all_forest <- randomForest(x = artist_data$allx, y = artist_data$ally, ntree = 500, importance = TRUE, proximity = TRUE, keep.forest = TRUE)
+```{r run_models}
+# artist_motif_forest <- randomForest(x = select(artist_data$allx, one_of(motif_vars())), y = artist_data$ally, ntree = 500, importance = TRUE, proximity = TRUE, keep.forest = TRUE)
+# artist_comp_forest <- randomForest(x = select(artist_data$allx, one_of(comp_vars())), y = artist_data$ally, ntree = 500, importance = TRUE, proximity = TRUE, keep.forest = TRUE)
+# artist_all_forest <- randomForest(x = artist_data$allx, y = artist_data$ally, ntree = 500, importance = TRUE, proximity = TRUE, keep.forest = TRUE)
+# 
+# 
+# 
+# artist_union_motif_forest <- randomForest(x = select(artist_union_data$allx, one_of(motif_vars())), y = artist_union_data$ally, ntree = 500, importance = TRUE, proximity = TRUE, keep.forest = TRUE)
+# artist_union_comp_forest <- randomForest(x = select(artist_union_data$allx, one_of(comp_vars())), y = artist_union_data$ally, ntree = 500, importance = TRUE, proximity = TRUE, keep.forest = TRUE)
+# artist_union_all_forest <- randomForest(x = artist_union_data$allx, y = artist_union_data$ally, ntree = 500, importance = TRUE, proximity = TRUE, keep.forest = TRUE)
 
+artist_motif_forest <- randomForest(
+  x = select(artist_union_data$defx, one_of(motif_vars())), 
+  y = artist_union_data$defy, 
+  xtest = select(artist_union_data$unkx, one_of(motif_vars())),
+  ytest = artist_union_data$unky,
+  importance = TRUE,
+  proximity = TRUE,
+  keep.forest = TRUE)
 
-
-artist_union_motif_forest <- randomForest(x = select(artist_union_data$allx, one_of(motif_vars())), y = artist_union_data$ally, ntree = 500, importance = TRUE, proximity = TRUE, keep.forest = TRUE)
-artist_union_comp_forest <- randomForest(x = select(artist_union_data$allx, one_of(comp_vars())), y = artist_union_data$ally, ntree = 500, importance = TRUE, proximity = TRUE, keep.forest = TRUE)
-artist_union_all_forest <- randomForest(x = artist_union_data$allx, y = artist_union_data$ally, ntree = 500, importance = TRUE, proximity = TRUE, keep.forest = TRUE)
+artist_comp_forest <- randomForest(
+  x = select(artist_union_data$defx, one_of(comp_vars())), 
+  y = artist_union_data$defy, 
+  xtest = select(artist_union_data$unkx, one_of(comp_vars())),
+  ytest = artist_union_data$unky,
+  importance = TRUE,
+  proximity = TRUE,
+  keep.forest = TRUE)
 ```
 
 ```{r show_error}
-error <- function(rf) {
-  rf[["err.rate"]] %>% 
+error <- function(rf, test = FALSE) {
+  if (test) {
+    er <- rf[["test"]][["err.rate"]]
+  } else {
+    er <- rf[["err.rate"]]
+  }
+  
+  er %>% 
     as.data.frame() %>%
     slice(nrow(.)) %>% 
-    gather(actual, error_rate, seq_len(ncol(.)))
+    gather(actual, error_rate, seq_len(ncol(.))) %>% 
+    filter(!(actual %in% c("OOB", "Test")))
 }
   
-bind_rows(
-motif = error(artist_motif_forest),
-composition = error(artist_comp_forest),
-.id = "predictor_type") %>% 
-  filter(actual != "OOB") %>% 
+dual_error_data <- bind_rows(
+  definite = bind_rows(
+    motif = error(artist_motif_forest),
+    composition = error(artist_comp_forest),
+    .id = "predictor_type"),
+  unknown = bind_rows(
+    motif = error(artist_motif_forest, test = TRUE),
+    composition = error(artist_comp_forest, test = TRUE),
+    .id = "predictor_type"),
+  .id = "is_definite") %>% 
   spread(predictor_type, value = error_rate) %>% 
-  ggplot(aes(x = composition, y = motif, color = actual)) +
+  unite("vals", composition, motif) %>% 
+  spread(is_definite, value = vals) %>% 
+  separate(definite, into = c("definite_motif", "definite_composition"), sep = "_", convert = TRUE) %>% 
+  separate(unknown, into = c("unknown_motif", "unknown_composition"), sep = "_", convert = TRUE)
+
+dual_error_plot <- function(df, pop = NULL) {
+  
+  if (is.null(pop)) {
+    p <- ggplot(df, aes(x = definite_composition, y = definite_motif, color = actual))
+  } else {
+    p <- ggplot(df, aes(x = definite_composition, y = definite_motif, color = actual, alpha = actual == pop)) +
+      scale_alpha_discrete(guide = FALSE)
+  }
+  
+  p +
+    geom_hline(yintercept = 0.5, linetype = 2) + 
+    geom_vline(xintercept = 0.5, linetype = 2) +
+    geom_segment(aes(xend = unknown_composition, yend = unknown_motif), size = 1, arrow = arrow()) +
+    geom_label_repel(aes(label = actual)) +
+    scale_color_brewer(palette = "Dark2", guide = FALSE) +
+    theme_bw() +
+    xlim(0, 1) +
+    ylim(0, 1)
+}
+
+dual_error_plot(dual_error_data, pop = "Gerrit Heda")
+```
+
+```{r tween_plot}
+dual_error_data <- bind_rows(
+  definite = bind_rows(
+    motif = error(artist_motif_forest),
+    composition = error(artist_comp_forest),
+    .id = "predictor_type"),
+  unknown = bind_rows(
+    motif = error(artist_motif_forest, test = TRUE),
+    composition = error(artist_comp_forest, test = TRUE),
+    .id = "predictor_type"),
+  .id = "is_definite") %>% 
+  spread(predictor_type, error_rate)
+
+kdata <- dual_error_data %>% 
+  mutate_if(is.character, funs(as.factor)) %>% 
+  split(f = dual_error_data$is_definite)
+
+library(tweenr)
+ts <- tween_states(kdata, tweenlength = 10, statelength = 5, ease = "quadratic-in", nframes = 300)
+library(gganimate)
+
+p <- ggplot(ts, aes(x = composition, y = motif, color = actual, frame = .frame)) +
   geom_hline(yintercept = 0.5, linetype = 2) + 
-  geom_vline(xintercept = 0.5, linetype = 2) +
-  geom_point(size = 4) +
-  geom_label_repel(aes(label = actual)) +
-  theme_bw() +
-  xlim(0, 1) +
-  ylim(0, 1)
+    geom_vline(xintercept = 0.5, linetype = 2) +
+    geom_point(size = 3) +
+    geom_label_repel(aes(label = actual)) +
+    scale_color_brewer(palette = "Dark2", guide = FALSE) +
+    theme_bw() +
+    xlim(0, 1) +
+    ylim(0, 1)
+gg_animate(p, interval = 1/32)
 ```
 
 ```{r qualified}
