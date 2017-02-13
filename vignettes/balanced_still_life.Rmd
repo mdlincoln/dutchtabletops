@@ -26,13 +26,18 @@ knitr::opts_chunk$set(fig.width = 9, fig.height = 9, warning = FALSE, echo = FAL
 ```{r create_model}
 # Model artists with only n or more paintings
 n_ptg <- 5
-cleared_artists <- unique(filter(group_by(dt_compiled, artist), n() >= n_ptg)$artist)
-cleared_artist_union <- unique(filter(group_by(dt_compiled, artist_union), n() >= n_ptg)$artist_union)
+dt_reveleved <- dt_compiled %>% 
+  mutate(
+    artist_relationship = recode_factor(artist_relationship, "Co-painter" = "After", "Possible" = "After"),
+    artist_union = as.factor(paste(artist, artist_relationship, sep = " - ")))
 
-dt_valid <- dt_compiled %>% 
+cleared_artists <- unique(filter(group_by(dt_reveleved, artist), n() >= n_ptg)$artist)
+cleared_artist_union <- unique(filter(group_by(dt_reveleved, artist_union), n() >= n_ptg)$artist_union)
+
+dt_valid <- dt_reveleved %>% 
   filter(artist %in% cleared_artists, artist_union %in% cleared_artist_union) %>% 
-  select(one_of(comp_vars(), motif_vars(), "year_early", "year_late", "artist", "artist_union")) %>%
-  mutate(year = (year_early + year_late) / 2) %>% 
+  select(one_of(comp_vars(), motif_vars(), "year_early", "year_late", "artist", "artist_union", "artist_relationship")) %>%
+  mutate(year = (year_early + year_late) / 2, artist_union = fct_drop(artist_union)) %>% 
   dmap_if(function(x) is.character(x) | is.logical(x), as.factor)
 
 partition <- function(df, response_var, ratio = 0.2) {
@@ -71,10 +76,17 @@ partition <- function(df, response_var, ratio = 0.2) {
 
 artist_data <- partition(dt_valid, "artist")
 year_data <- partition(dt_valid, "year")
+artist_union_data <- partition(dt_valid, "artist_union")
 
-artist_motif_forest <- randomForest(x = select(artist_data$allx, one_of(motif_vars())), y = artist_data$ally, ntree = 5000, importance = TRUE, proximity = TRUE, do.trace = 100, keep.forest = TRUE)
-artist_comp_forest <- randomForest(x = select(artist_data$allx, one_of(comp_vars())), y = artist_data$ally, ntree = 5000, importance = TRUE, proximity = TRUE, do.trace = 100, keep.forest = TRUE)
-artist_all_forest <- randomForest(x = artist_data$allx, y = artist_data$ally, ntree = 5000, importance = TRUE, proximity = TRUE, do.trace = 100, keep.forest = TRUE)
+artist_motif_forest <- randomForest(x = select(artist_data$allx, one_of(motif_vars())), y = artist_data$ally, ntree = 500, importance = TRUE, proximity = TRUE, keep.forest = TRUE)
+artist_comp_forest <- randomForest(x = select(artist_data$allx, one_of(comp_vars())), y = artist_data$ally, ntree = 500, importance = TRUE, proximity = TRUE, keep.forest = TRUE)
+artist_all_forest <- randomForest(x = artist_data$allx, y = artist_data$ally, ntree = 500, importance = TRUE, proximity = TRUE, keep.forest = TRUE)
+
+
+
+artist_union_motif_forest <- randomForest(x = select(artist_union_data$allx, one_of(motif_vars())), y = artist_union_data$ally, ntree = 500, importance = TRUE, proximity = TRUE, keep.forest = TRUE)
+artist_union_comp_forest <- randomForest(x = select(artist_union_data$allx, one_of(comp_vars())), y = artist_union_data$ally, ntree = 500, importance = TRUE, proximity = TRUE, keep.forest = TRUE)
+artist_union_all_forest <- randomForest(x = artist_union_data$allx, y = artist_union_data$ally, ntree = 500, importance = TRUE, proximity = TRUE, keep.forest = TRUE)
 ```
 
 ```{r show_error}
@@ -92,8 +104,31 @@ composition = error(artist_comp_forest),
   filter(actual != "OOB") %>% 
   spread(predictor_type, value = error_rate) %>% 
   ggplot(aes(x = composition, y = motif, color = actual)) +
+  geom_hline(yintercept = 0.5, linetype = 2) + 
+  geom_vline(xintercept = 0.5, linetype = 2) +
   geom_point(size = 4) +
-  geom_label_repel(aes(label = actual))
+  geom_label_repel(aes(label = actual)) +
+  theme_bw() +
+  xlim(0, 1) +
+  ylim(0, 1)
+```
+
+```{r qualified}
+bind_rows(
+  motif = error(artist_union_motif_forest),
+  composition = error(artist_union_comp_forest),
+  .id = "predictor_type") %>% 
+  filter(actual != "OOB") %>% 
+  separate(actual, into = c("artist", "qualification"), sep = "-", remove = FALSE) %>%
+  spread(predictor_type, value = error_rate) %>% 
+  ggplot(aes(x = composition, y = motif, color = artist)) +
+  geom_hline(yintercept = 0.5, linetype = 2) + 
+  geom_vline(xintercept = 0.5, linetype = 2) +
+  geom_point(aes(shape = qualification), size = 4) +
+  geom_label_repel(aes(label = actual)) +
+  theme_bw() +
+  xlim(0, 1) +
+  ylim(0, 1)
 
 ```
 
