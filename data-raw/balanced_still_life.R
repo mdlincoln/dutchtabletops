@@ -203,20 +203,69 @@ ggsave(dual_error_plot(dual_error_data, pop = c("Pieter Claesz", "Gerrit Heda", 
 
 
 var_name <- "LV"
-importances <- t(artist_motif_forest$localImportance) %>%
+importances <- t(artist_all_forest$localImportance) %>%
   as.data.frame() %>%
-  slice(which(artist_union_data$defy == "Floris van Dijck")) %>%
+  slice(which(artist_union_data$defy == "Pieter Claesz")) %>%
   summarize_all(funs(mean)) %>%
   gather(motif_code, value) %>%
-  inner_join(dt_motif_labels, by = "motif_code") %>%
+  left_join(dt_motif_labels, by = "motif_code") %>%
   arrange(desc(value))
 
-sim_cheese <- simulate_data(artist_motif_forest, artist_union_data$defx, "Floris van Dijck", var1 = "Fi")
+globally_common_vars <- dt_valid %>% select(one_of(motif_vars())) %>%
+  gather(motif_code, is_present, everything()) %>%
+  filter(is_present == "TRUE") %>%
+  count(motif_code, sort = TRUE) %>%
+  inner_join(dt_motif_labels, by = "motif_code")
 
-pc_importances <- map_df(importances$motif_code, function(x) {
-  simulate_data(artist_motif_forest, artist_union_data$defx, "Floris van Dijck", var1 = x) %>%
-    spread_(x, "preds")
-  })
+# simulate_data(artist_motif_forest, select(artist_union_data$defx, one_of(motif_vars())), class = cleared_artists[1], var1 = "LV") %>%
+#   spread_()
+
+# all_importances <- map_df(set_names(cleared_artists), function(y) {
+#   map_df(set_names(motif_vars()), function(x) {
+#     simulate_data(artist_motif_forest, select(artist_union_data$defx, one_of(motif_vars())), class = y, var1 = x) %>%
+#       spread_(x, "preds")
+#   }, .id = "motif_code")
+# }, .id = "artist")
+
+motif_dist <- dt_valid %>%
+  select(one_of(motif_vars())) %>%
+  mutate_all(funs(ifelse(. == TRUE, 1L, 0L))) %>%
+  data.matrix() %>%
+  t() %>%
+  dist(method = "euclidean") %>%
+  as.matrix() %>%
+  as.data.frame() %>%
+  rownames_to_column(var = "origin") %>%
+  gather(pair, distance, -origin) %>%
+  mutate(dist_rank = ntile(distance, 100)) %>%
+  filter(distance > 0) %>%
+  arrange(desc(distance))
+
+motif_dist %>%
+  filter(str_detect(origin, "Sh")) %>%
+  mutate()
+
+# library(igraph)
+# mg <- dt_valid %>%
+#   select(one_of(motif_vars())) %>%
+#   mutate_all(funs(ifelse(. == TRUE, 1L, 0L))) %>%
+#   data.matrix() %>%
+#   t() %>%
+#   dist(method = "euclidean") %>%
+#   as.matrix() %>%
+#   graph_from_adjacency_matrix(weighted = TRUE)
+
+# smg <- simplify(mg, edge.attr.comb = list(weight = "sum"))
+# fsmg <- subgraph.edges(smg, E(smg)[weight > 15])
+# V(fsmg)$degree <- degree(fsmg, mode = "all", normalized = TRUE)
+# vcount(fsmg)
+# ecount(fsmg)
+# library(ggraph)
+# ggraph(fsmg, "igraph", algorithm = "fr") +
+#   geom_edge_fan(aes(alpha = weight)) +
+#   geom_node_point(aes(size = degree)) +
+#   ggforce::theme_no_axes()
+
 
 good_bad <- bind_cols(importances, pc_importances) %>%
   slice(1:20) %>%
