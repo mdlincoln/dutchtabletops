@@ -81,10 +81,12 @@ partition <- function(df, response_var, ratio = 0.2) {
   l
 }
 
-artist_data <- partition(dt_valid, "artist")
+# artist_data <- partition(dt_valid, "artist")
 year_data <- partition(dt_valid, "year")
 artist_union_data <- partition(dt_valid, "artist")
 
+
+year_forest <- randomForest(x = year_data$defx, y = year_data$defy, xtest = year_data$unkx, ytest = year_data$unky, ntree = 500, importance = TRUE, keep.forest = TRUE)
 
 # artist_motif_forest <- randomForest(x = select(artist_data$allx, one_of(motif_vars())), y = artist_data$ally, ntree = 500, importance = TRUE, proximity = TRUE, keep.forest = TRUE)
 # artist_comp_forest <- randomForest(x = select(artist_data$allx, one_of(comp_vars())), y = artist_data$ally, ntree = 500, importance = TRUE, proximity = TRUE, keep.forest = TRUE)
@@ -201,90 +203,61 @@ ggsave(dual_error_plot(dual_error_data, pop = c("Pieter Claesz", "Gerrit Heda", 
 
 # Feature power ----
 
-
-var_name <- "LV"
-importances <- t(artist_all_forest$localImportance) %>%
-  as.data.frame() %>%
-  slice(which(artist_union_data$defy == "Pieter Claesz")) %>%
-  summarize_all(funs(mean)) %>%
-  gather(motif_code, value) %>%
-  left_join(dt_motif_labels, by = "motif_code") %>%
-  arrange(desc(value))
-
 globally_common_vars <- dt_valid %>% select(one_of(motif_vars())) %>%
   gather(motif_code, is_present, everything()) %>%
   filter(is_present == "TRUE") %>%
   count(motif_code, sort = TRUE) %>%
   inner_join(dt_motif_labels, by = "motif_code")
 
-# simulate_data(artist_motif_forest, select(artist_union_data$defx, one_of(motif_vars())), class = cleared_artists[1], var1 = "LV") %>%
-#   spread_()
+mk_dummy <- function(df, varname) {
+  df %>%
+    mutate(is_present = 1L) %>%
+    spread_(key_col = varname, value_col = "is_present", fill = 0L, sep = "_")
+}
 
-# all_importances <- map_df(set_names(cleared_artists), function(y) {
-#   map_df(set_names(motif_vars()), function(x) {
-#     simulate_data(artist_motif_forest, select(artist_union_data$defx, one_of(motif_vars())), class = y, var1 = x) %>%
-#       spread_(x, "preds")
-#   }, .id = "motif_code")
-# }, .id = "artist")
+tl_motifs <- dt_motif_taxonomy %>%
+  filter(is_top_level) %>%
+  .$motif_code
 
 motif_dist <- dt_valid %>%
-  select(one_of(motif_vars())) %>%
-  mutate_all(funs(ifelse(. == TRUE, 1L, 0L))) %>%
+  select(one_of(tl_motifs)) %>%
+  mutate_all(funs(if_else(. == TRUE, 1L, 0L))) %>%
   data.matrix() %>%
   t() %>%
-  dist(method = "euclidean") %>%
+  dist(method = "manhattan")
+
+cmdscale(motif_dist) %>%
+  as.data.frame() %>%
+  rownames_to_column() %>%
+  left_join(select(dt_motif_labels, motif_code, wrapped_motif_label), by = c("rowname" = "motif_code")) %>%
+  ggplot(aes(x = V1, y = V2)) +
+  geom_point() +
+  geom_label_repel(aes(label = wrapped_motif_label))
+
+motif_dist_df <- motif_dist %>%
   as.matrix() %>%
   as.data.frame() %>%
   rownames_to_column(var = "origin") %>%
-  gather(pair, distance, -origin) %>%
+  gather(target, distance, -origin) %>%
   mutate(dist_rank = ntile(distance, 100)) %>%
-  filter(distance > 0) %>%
-  arrange(desc(distance))
-
-motif_dist %>%
-  filter(str_detect(origin, "Sh")) %>%
-  mutate()
-
-# library(igraph)
-# mg <- dt_valid %>%
-#   select(one_of(motif_vars())) %>%
-#   mutate_all(funs(ifelse(. == TRUE, 1L, 0L))) %>%
-#   data.matrix() %>%
-#   t() %>%
-#   dist(method = "euclidean") %>%
-#   as.matrix() %>%
-#   graph_from_adjacency_matrix(weighted = TRUE)
-
-# smg <- simplify(mg, edge.attr.comb = list(weight = "sum"))
-# fsmg <- subgraph.edges(smg, E(smg)[weight > 15])
-# V(fsmg)$degree <- degree(fsmg, mode = "all", normalized = TRUE)
-# vcount(fsmg)
-# ecount(fsmg)
-# library(ggraph)
-# ggraph(fsmg, "igraph", algorithm = "fr") +
-#   geom_edge_fan(aes(alpha = weight)) +
-#   geom_node_point(aes(size = degree)) +
-#   ggforce::theme_no_axes()
+  arrange(desc(distance)) %>%
+  left_join(select(dt_motif_labels, motif_code, origin_label = wrapped_motif_label), by = c("origin" = "motif_code")) %>%
+  left_join(select(dt_motif_labels, motif_code, target_label = wrapped_motif_label), by = c("target" = "motif_code")) %>%
+  mutate(
+    origin = if_else(is.na(origin_label), origin, origin_label),
+    target = if_else(is.na(target_label), target, target_label)) %>%
+  select(origin, target, distance, dist_rank)
 
 
-good_bad <- bind_cols(importances, pc_importances) %>%
-  slice(1:20) %>%
-  gather(is_present, pred, `FALSE`:`TRUE`)
-
-ggplot(good_bad, aes(x = motif_label, fill = is_present, y = pred)) +
-  geom_bar(stat = "identity", position = "dodge") +
+motif_dist_df %>%
+  filter(origin == "Shellfish") %>%
+  mutate(newtile = ntile(distance, 100)) %>%
+  filter(target %in% c("Mince pie", "Bread", "Overturned Tazza", "Broken glass")) %>%
+  ggplot(aes(x = target, y = distance)) +
+  geom_bar(stat = "identity") +
+  geom_hline(aes(yintercept = median(distance))) +
   coord_flip()
 
-ggplot(sim_cheese, aes(x = B, fill = LV, group = LV)) +
-  geom_bar(aes(y = preds), stat = "identity", position = "dodge") +
-  facet_wrap(~Fi)
-
-# importance pca ---
-
-fvd <- artist_all_forest$localImportance %>%
-  t() %>%
-  as.data.frame() %>%
-  slice(which(artist_union_data$defy == "Floris van Dijck"))
 
 fvd_pca <- prcomp(fvd)$rotation %>%
   as.data.frame() %>%
